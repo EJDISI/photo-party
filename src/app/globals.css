@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf8f5;
+  --foreground: #2c3e35;
+}
+
+html, body {
+  background-color: #faf8f5;
+  color: #2c3e35;
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
