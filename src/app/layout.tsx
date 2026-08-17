@@ -17,7 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#ffffff",
+  themeColor: "#065f46",
 };
 
 export const metadata: Metadata = {
@@ -31,8 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pl">
-      <body className={`${geistSans.variable} ${geistMono.variable} bg-[#faf8f5] text-[#2c3e35]`}>
+    <html lang="pl" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] transition-colors duration-200`}
+      >
         {children}
       </body>
     </html>

@@ -19,7 +19,9 @@ import {
   QrCode,
   Copy,
   Check,
-  Trash2
+  Trash2,
+  Moon,
+  Sun
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -104,6 +106,7 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
 
 export default function PhotoParty() {
   const [mounted, setMounted] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [author, setAuthor] = useState("");
   const [authorError, setAuthorError] = useState(false);
@@ -140,6 +143,20 @@ export default function PhotoParty() {
 
   useEffect(() => {
     setMounted(true);
+
+    // Inicjalizacja trybu ciemnego
+    const savedTheme = localStorage.getItem("photo_party_theme");
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldBeDark = savedTheme === "dark" || (!savedTheme && systemPrefersDark);
+
+    if (shouldBeDark) {
+      setIsDark(true);
+      document.documentElement.classList.add("dark");
+    } else {
+      setIsDark(false);
+      document.documentElement.classList.remove("dark");
+    }
+
     if (typeof window !== "undefined") {
       setCurrentUrl(window.location.origin);
       const savedKeys = localStorage.getItem("photo_party_my_keys");
@@ -153,6 +170,18 @@ export default function PhotoParty() {
     const saved = localStorage.getItem("photo_party_author");
     if (saved) setAuthor(saved);
   }, [fetchGallery]);
+
+  const toggleDarkMode = () => {
+    const nextState = !isDark;
+    setIsDark(nextState);
+    if (nextState) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("photo_party_theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("photo_party_theme", "light");
+    }
+  };
 
   const handleAuthorChange = (val: string) => {
     setAuthor(val);
@@ -372,8 +401,8 @@ export default function PhotoParty() {
 
   if (!mounted) {
     return (
-      <main className="min-h-screen bg-[#faf8f5] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-800 animate-spin" />
+      <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-emerald-800 dark:text-emerald-500 animate-spin" />
       </main>
     );
   }
@@ -384,41 +413,56 @@ export default function PhotoParty() {
   const qrImageUrl = currentUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
         currentUrl
-      )}&color=065f46&bgcolor=ffffff`
+      )}&color=${isDark ? "e6ede8" : "065f46"}&bgcolor=${isDark ? "19231d" : "ffffff"}`
     : "";
 
   return (
-    <main className="min-h-screen bg-[#faf8f5] text-[#2c3e35] pb-20 selection:bg-emerald-200">
+    <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200 transition-colors duration-200">
       {/* Pasek nawigacyjny */}
-      <header className="bg-white/95 backdrop-blur-md border-b border-[#e8e2d8] sticky top-0 z-20 px-6 pt-4 pb-4 text-center shadow-sm relative">
-        <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 mb-1">
+      <header className="bg-white/95 dark:bg-[#141d18]/95 backdrop-blur-md border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center shadow-sm relative transition-colors">
+        <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-1">
           <span>Wesele</span>
           <Heart className="w-4 h-4 fill-rose-400 text-rose-400" />
         </div>
-        <h1 className="text-2xl sm:text-3xl font-serif font-extrabold tracking-tight text-[#1f2d27]">
+        <h1 className="text-2xl sm:text-3xl font-serif font-extrabold tracking-tight text-[#1f2d27] dark:text-[#f2f7f4]">
           Kinga i Kamil
         </h1>
 
-        <button
-          onClick={() => setShowQrModal(true)}
-          className="absolute right-4 top-4 p-2.5 bg-stone-100 hover:bg-stone-200 text-[#2c3e35] rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-          title="Pokaż kod QR"
-        >
-          <QrCode className="w-5 h-5 text-emerald-800" />
-          <span className="text-[11px] font-bold hidden sm:inline">QR</span>
-        </button>
+        {/* Przyciski w nagłówku: Tryb Ciemny & QR */}
+        <div className="absolute right-4 top-4 flex items-center gap-2">
+          <button
+            onClick={toggleDarkMode}
+            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center justify-center shadow-sm"
+            title={isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"}
+          >
+            {isDark ? (
+              <Sun className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Moon className="w-5 h-5 text-emerald-800" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+            title="Pokaż kod QR"
+          >
+            <QrCode className="w-5 h-5 text-emerald-800 dark:text-emerald-400" />
+            <span className="text-[11px] font-bold hidden sm:inline">QR</span>
+          </button>
+        </div>
       </header>
 
       <div className="max-w-md mx-auto px-4 mt-6 space-y-6">
         {/* Ekran po wysłaniu */}
         {isComplete ? (
-          <div className="bg-white rounded-3xl p-6 shadow-sm text-center border border-[#e8e2d8] space-y-4">
-            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+          <div className="bg-white dark:bg-[#16201a] rounded-3xl p-6 shadow-sm text-center border border-[#e8e2d8] dark:border-[#22332a] space-y-4">
+            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/50 rounded-full flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-serif font-bold text-[#1f2d27]">Wszystko wgrane! ❤️</h2>
-            <p className="text-stone-600 text-sm leading-relaxed">
-              Dziękujemy, <span className="font-semibold text-[#1f2d27]">{author}</span>! Twoje pamiątki pojawiły się we wspólnej galerii poniżej.
+            <h2 className="text-2xl font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">Wszystko wgrane! ❤️</h2>
+            <p className="text-stone-600 dark:text-stone-300 text-sm leading-relaxed">
+              Dziękujemy, <span className="font-semibold text-[#1f2d27] dark:text-white">{author}</span>! Twoje pamiątki pojawiły się we wspólnej galerii poniżej.
             </p>
             <button
               onClick={handleReset}
@@ -431,19 +475,19 @@ export default function PhotoParty() {
         ) : (
           <>
             <div className="text-center px-2">
-              <p className="text-sm text-stone-600 leading-relaxed font-light">
+              <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed font-light">
                 Cieszymy się, że jesteście z nami! Podzielcie się swoimi zdjęciami i filmami z wesela.
               </p>
             </div>
 
             {/* Formularz podpisu */}
-            <div className={`bg-white p-5 rounded-2xl border transition-all shadow-sm ${
+            <div className={`bg-white dark:bg-[#16201a] p-5 rounded-2xl border transition-all shadow-sm ${
               authorError 
-                ? "border-rose-400 ring-2 ring-rose-200" 
-                : "border-[#e8e2d8]"
+                ? "border-rose-400 ring-2 ring-rose-200 dark:ring-rose-950" 
+                : "border-[#e8e2d8] dark:border-[#22332a]"
             }`}>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider">
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase tracking-wider">
                   Twój podpis <span className="text-rose-500">*</span>
                 </label>
                 {authorError && (
@@ -458,14 +502,14 @@ export default function PhotoParty() {
                 value={author}
                 onChange={(e) => handleAuthorChange(e.target.value)}
                 placeholder="np. Szwagier, Świadkowie, Ciocia Kasia..."
-                className={`w-full px-4 py-3 bg-[#faf8f5] border rounded-xl text-sm transition focus:outline-none focus:ring-2 ${
+                className={`w-full px-4 py-3 bg-[#faf8f5] dark:bg-[#111914] text-[#2c3e35] dark:text-[#f2f7f4] border rounded-xl text-sm transition focus:outline-none focus:ring-2 ${
                   authorError
-                    ? "border-rose-300 focus:ring-rose-400 bg-rose-50/40"
-                    : "border-stone-200 focus:ring-emerald-800"
+                    ? "border-rose-300 focus:ring-rose-400 bg-rose-50/40 dark:bg-rose-950/20"
+                    : "border-stone-200 dark:border-stone-800 focus:ring-emerald-800 dark:focus:ring-emerald-600"
                 }`}
                 disabled={isUploading}
               />
-              <p className="text-[11px] text-stone-400 mt-1.5 font-light">
+              <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-1.5 font-light">
                 Podpis pojawi się przy Twoich zdjęciach i filmach we wspólnej galerii.
               </p>
             </div>
@@ -539,30 +583,30 @@ export default function PhotoParty() {
             <button
               type="button"
               onClick={() => setShowQrModal(true)}
-              className="w-full py-3 bg-white hover:bg-stone-50 border border-[#e8e2d8] rounded-2xl text-xs font-semibold text-stone-700 flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99] cursor-pointer"
+              className="w-full py-3 bg-white dark:bg-[#16201a] hover:bg-stone-50 dark:hover:bg-[#1c2921] border border-[#e8e2d8] dark:border-[#22332a] rounded-2xl text-xs font-semibold text-stone-700 dark:text-stone-200 flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99] cursor-pointer"
             >
-              <QrCode className="w-4 h-4 text-emerald-800" />
+              <QrCode className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
               <span>Pokaż kod QR gościom obok 📲</span>
             </button>
 
             {/* Pasek postępu */}
             {isUploading && (
-              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
-                <Loader2 className="w-6 h-6 text-emerald-800 animate-spin shrink-0" />
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                <Loader2 className="w-6 h-6 text-emerald-800 dark:text-emerald-400 animate-spin shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-emerald-900">
+                  <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                     Wgrywanie ({completedCount} z {files.length} gotowe)
                   </p>
-                  <p className="text-[11px] text-emerald-800">Prosimy nie zamykać strony.</p>
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-400">Prosimy nie zamykać strony.</p>
                 </div>
               </div>
             )}
 
             {/* Podgląd plików */}
             {files.length > 0 && (
-              <div className="bg-white p-5 rounded-2xl border border-[#e8e2d8] shadow-sm space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-stone-100">
-                  <span className="text-xs font-bold uppercase tracking-wider text-stone-600">
+              <div className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-stone-100 dark:border-stone-800">
+                  <span className="text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">
                     Wybrane pliki ({files.length})
                   </span>
                   {!isUploading && (
@@ -577,7 +621,7 @@ export default function PhotoParty() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {files.map((item) => (
-                    <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-100 border-2 border-stone-200 flex flex-col justify-end shadow-sm">
+                    <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-100 dark:bg-[#111914] border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
                       {item.file.type.startsWith("video/") ? (
                         <video src={item.previewUrl || ""} className="absolute inset-0 w-full h-full object-cover" />
                       ) : item.previewUrl ? (
@@ -591,9 +635,9 @@ export default function PhotoParty() {
                           }}
                         />
                       ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-stone-200">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-stone-200 dark:bg-stone-800">
                           <ImageIcon className="w-6 h-6 text-stone-400 mb-1" />
-                          <span className="text-[10px] text-stone-600 truncate max-w-full px-1">{item.name}</span>
+                          <span className="text-[10px] text-stone-600 dark:text-stone-300 truncate max-w-full px-1">{item.name}</span>
                         </div>
                       )}
 
@@ -675,7 +719,7 @@ export default function PhotoParty() {
                   disabled={isUploading}
                   className={`w-full py-4 font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 mt-4 cursor-pointer text-sm sm:text-base ${
                     !isAuthorValid
-                      ? "bg-stone-300 text-stone-500 cursor-not-allowed"
+                      ? "bg-stone-300 dark:bg-stone-800 text-stone-500 dark:text-stone-600 cursor-not-allowed"
                       : "bg-emerald-800 hover:bg-emerald-900 active:scale-[0.99] text-white"
                   }`}
                 >
@@ -701,31 +745,31 @@ export default function PhotoParty() {
         )}
 
         {/* Wspólna Galeria */}
-        <section className="bg-white p-5 rounded-2xl border border-[#e8e2d8] shadow-sm space-y-4 pt-6">
+        <section className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
-              <h2 className="text-base font-serif font-bold text-[#1f2d27]">
+              <h2 className="text-base font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">
                 Wspólna Galeria ({gallery.length})
               </h2>
             </div>
             <button
               onClick={fetchGallery}
               disabled={isLoadingGallery}
-              className="text-xs text-stone-500 hover:text-stone-800 flex items-center gap-1 cursor-pointer transition p-1"
+              className="text-xs text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-white flex items-center gap-1 cursor-pointer transition p-1"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingGallery ? "animate-spin text-emerald-800" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingGallery ? "animate-spin text-emerald-800 dark:text-emerald-400" : ""}`} />
               <span className="hidden sm:inline">Odśwież</span>
             </button>
           </div>
 
           {isLoadingGallery && gallery.length === 0 ? (
-            <div className="py-8 flex flex-col items-center justify-center text-stone-400 gap-2">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-800" />
+            <div className="py-8 flex flex-col items-center justify-center text-stone-400 dark:text-stone-500 gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-emerald-800 dark:text-emerald-400" />
               <p className="text-xs">Ładowanie pamiątek...</p>
             </div>
           ) : gallery.length === 0 ? (
-            <div className="py-8 text-center text-stone-400 text-xs font-light">
+            <div className="py-8 text-center text-stone-400 dark:text-stone-500 text-xs font-light">
               Bądź pierwszą osobą, która doda zdjęcie lub film do albumu! 📸
             </div>
           ) : (
@@ -737,7 +781,7 @@ export default function PhotoParty() {
                   <div
                     key={photo.key}
                     onClick={() => setSelectedPhoto(photo)}
-                    className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 border border-stone-200 cursor-pointer shadow-sm active:scale-95 transition"
+                    className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#111914] border border-stone-200 dark:border-stone-800 cursor-pointer shadow-sm active:scale-95 transition"
                   >
                     {photo.isVideo ? (
                       <video src={photo.url} className="w-full h-full object-cover pointer-events-none" />
@@ -793,27 +837,27 @@ export default function PhotoParty() {
           onClick={() => setShowQrModal(false)}
         >
           <div
-            className="bg-white w-full max-w-xs rounded-3xl p-6 text-center shadow-2xl space-y-4 relative border border-stone-200"
+            className="bg-white dark:bg-[#16201a] w-full max-w-xs rounded-3xl p-6 text-center shadow-2xl space-y-4 relative border border-stone-200 dark:border-[#22332a]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowQrModal(false)}
-              className="absolute top-3 right-3 p-2 text-stone-400 hover:text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-full transition cursor-pointer"
+              className="absolute top-3 right-3 p-2 text-stone-400 hover:text-stone-800 dark:hover:text-white bg-stone-100 dark:bg-[#1f2d25] rounded-full transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="pt-2">
-              <div className="flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-800 mb-1">
+              <div className="flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 mb-1">
                 <span>Zeskanuj aparatami</span>
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               </div>
-              <h3 className="text-xl font-serif font-bold text-[#1f2d27]">
+              <h3 className="text-xl font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">
                 Dołącz do Albumu
               </h3>
             </div>
 
-            <div className="bg-[#faf8f5] p-4 rounded-2xl border border-stone-200 flex items-center justify-center shadow-inner">
+            <div className="bg-[#faf8f5] dark:bg-[#111914] p-4 rounded-2xl border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-inner">
               {qrImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -828,22 +872,22 @@ export default function PhotoParty() {
               )}
             </div>
 
-            <p className="text-xs text-stone-500 font-light leading-relaxed">
+            <p className="text-xs text-stone-500 dark:text-stone-400 font-light leading-relaxed">
               Skieruj aparat telefonu na ten kod, aby od razu dodawać zdjęcia i filmy!
             </p>
 
             <button
               onClick={copyLink}
-              className="w-full py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full py-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] text-stone-800 dark:text-stone-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               {copied ? (
                 <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span className="text-emerald-700">Skopiowano link!</span>
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-700 dark:text-emerald-400">Skopiowano link!</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4 text-stone-600" />
+                  <Copy className="w-4 h-4 text-stone-600 dark:text-stone-400" />
                   <span>Kopiuj link do strony</span>
                 </>
               )}
