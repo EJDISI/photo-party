@@ -931,20 +931,14 @@ export default function PhotoParty() {
               {files.map((item) => (
                 <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-900 border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
                   {item.file.type.startsWith("video/") ? (
-                    <>
-                      <video 
-                        src={item.previewUrl ? `${item.previewUrl}#t=0.001` : ""} 
-                        preload="metadata"
-                        playsInline
-                        muted
-                        className="absolute inset-0 w-full h-full object-cover" 
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="p-2 bg-black/60 rounded-full text-white">
-                          <Play className="w-5 h-5 fill-white" />
-                        </div>
+                    <div className="absolute inset-0 bg-[#121c16] flex flex-col items-center justify-center">
+                      <div className="p-3 bg-emerald-950/80 rounded-full text-amber-300 shadow-md">
+                        <Play className="w-6 h-6 fill-amber-300 ml-0.5" />
                       </div>
-                    </>
+                      <span className="text-[11px] text-stone-300 font-semibold mt-2 truncate max-w-[80%] px-2 text-center">
+                        {item.name}
+                      </span>
+                    </div>
                   ) : item.previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img 
@@ -1098,7 +1092,6 @@ export default function PhotoParty() {
                   const isMine = myUploadedKeys.includes(photo.key);
                   const isLiked = myLikedKeys.includes(photo.key);
                   const isTop3 = index < 3 && photo.likes > 0;
-                  const videoSource = photo.isVideo ? `${photo.url}#t=0.001` : photo.url;
 
                   return (
                     <div
@@ -1118,20 +1111,12 @@ export default function PhotoParty() {
                       )}
 
                       {photo.isVideo ? (
-                        <>
-                          <video 
-                            src={videoSource}
-                            preload="metadata"
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover pointer-events-none" 
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="p-2 bg-black/60 rounded-full text-white group-hover:scale-110 transition">
-                              <Play className="w-4 h-4 fill-white" />
-                            </div>
+                        <div className="w-full h-full bg-[#121c16] flex flex-col items-center justify-center relative">
+                          <div className="p-3 bg-emerald-950/80 border border-emerald-500/30 rounded-full text-amber-300 shadow-md group-hover:scale-110 transition">
+                            <Play className="w-5 h-5 fill-amber-300 ml-0.5" />
                           </div>
-                        </>
+                          <span className="text-[10px] text-stone-300 font-semibold mt-1">Wideo</span>
+                        </div>
                       ) : (
                         <Image
                           src={photo.url}
