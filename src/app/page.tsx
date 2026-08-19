@@ -59,6 +59,66 @@ interface GalleryPhoto {
   likes: number;
 }
 
+// Lekki komponent generujący miniaturę klatki z wideo dla iOS/Android bez zamrażania sieci
+function VideoThumbnail({ src }: { src: string }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.src = `${src}#t=0.5`;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+
+    const captureFrame = () => {
+      if (isCancelled) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 300;
+        canvas.height = video.videoHeight || 300;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+          setThumbUrl(dataUrl);
+        }
+      } catch {
+        // Ignorujemy błędy CORS jeśli wystąpią
+      }
+    };
+
+    video.addEventListener("loadeddata", captureFrame, { once: true });
+    video.addEventListener("seeked", captureFrame, { once: true });
+
+    return () => {
+      isCancelled = true;
+      video.src = "";
+    };
+  }, [src]);
+
+  return (
+    <div className="w-full h-full bg-[#121c16] relative overflow-hidden flex items-center justify-center">
+      {thumbUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbUrl}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[#16241c] flex items-center justify-center animate-pulse" />
+      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+        <div className="p-2.5 bg-black/70 backdrop-blur-xs rounded-full text-white shadow-md group-hover:scale-110 transition">
+          <Play className="w-5 h-5 fill-white ml-0.5" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const applyTransformations = async (item: FileItem): Promise<File> => {
   if (item.file.type.startsWith("video/")) {
     return item.file;
@@ -1111,12 +1171,7 @@ export default function PhotoParty() {
                       )}
 
                       {photo.isVideo ? (
-                        <div className="w-full h-full bg-[#121c16] flex flex-col items-center justify-center relative">
-                          <div className="p-3 bg-emerald-950/80 border border-emerald-500/30 rounded-full text-amber-300 shadow-md group-hover:scale-110 transition">
-                            <Play className="w-5 h-5 fill-amber-300 ml-0.5" />
-                          </div>
-                          <span className="text-[10px] text-stone-300 font-semibold mt-1">Wideo</span>
-                        </div>
+                        <VideoThumbnail src={photo.url} />
                       ) : (
                         <Image
                           src={photo.url}
@@ -1162,7 +1217,7 @@ export default function PhotoParty() {
                           }`}
                           title="Polub to zdjęcie"
                         >
-                          <Heart className={`w-3 h-3 ${isLiked ? "fill-white text-white" : "text-rose-400"}`} />
+                          <Heart className={`w-3.5 h-3.5 ${isLiked ? "fill-white text-white" : "text-rose-400"}`} />
                           <span>{photo.likes || 0}</span>
                         </button>
                       </div>
