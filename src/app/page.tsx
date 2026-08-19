@@ -579,17 +579,21 @@ export default function PhotoParty() {
 
   const handleDownload = async (photo: GalleryPhoto) => {
     const extension = photo.isVideo ? "mp4" : "jpg";
+    const mimeType = photo.isVideo ? "video/mp4" : "image/jpeg";
     const cleanAuthor = photo.author.replace(/[^a-zA-Z0-9]/g, "_") || "Gosc";
     const filename = `Wesele_Kinga_i_Kamil_${cleanAuthor}_${Date.now()}.${extension}`;
+
+    const downloadEndpoint = `/api/download?key=${encodeURIComponent(photo.key)}&filename=${encodeURIComponent(filename)}`;
 
     try {
       setIsDownloading(true);
 
-      const response = await fetch(photo.url);
+      const response = await fetch(downloadEndpoint);
       if (!response.ok) throw new Error("Błąd pobierania pliku");
       const blob = await response.blob();
 
-      const file = new File([blob], filename, { type: blob.type });
+      // Na telefonach z obsługą natywnego udostępniania (iOS/Android)
+      const file = new File([blob], filename, { type: mimeType });
       if (
         typeof navigator !== "undefined" &&
         navigator.canShare &&
@@ -602,6 +606,7 @@ export default function PhotoParty() {
         return;
       }
 
+      // Na komputerach PC/Mac: bezpośrednie pobranie na dysk
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -613,11 +618,8 @@ export default function PhotoParty() {
 
     } catch (error: unknown) {
       console.error("Błąd podczas zapisu:", error);
-      const link = document.createElement("a");
-      link.href = photo.url;
-      link.target = "_blank";
-      link.download = filename;
-      link.click();
+      // Bezpośrednie przejście do linku wymuszającego pobranie w przeglądarce
+      window.location.href = downloadEndpoint;
     } finally {
       setIsDownloading(false);
     }
