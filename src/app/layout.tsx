@@ -16,6 +16,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#065f46",
 };
@@ -33,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="pl" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] transition-colors duration-200`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] transition-colors duration-200 select-none touch-manipulation`}
       >
         {children}
       </body>

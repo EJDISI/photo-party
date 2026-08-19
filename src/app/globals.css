@@ -20,4 +20,11 @@ html, body {
   min-height: 100%;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
+  touch-action: pan-x pan-y;
+}
+
+/* Blokada automatycznego powiększania inputów na iOS (wymusza min. 16px fontu na focusie) */
+input, select, textarea, button {
+  font-size: 16px;
+  touch-action: manipulation;
 }

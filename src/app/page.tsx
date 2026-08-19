@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { 
   Camera, 
   Video,
@@ -21,7 +21,12 @@ import {
   Check,
   Trash2,
   Moon,
-  Sun
+  Sun,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Download
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -104,6 +109,182 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
   });
 };
 
+function ZoomableImage({
+  src,
+  alt,
+  onSwipeLeft,
+  onSwipeRight,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onSwipeLeft: () => void;
+  onSwipeRight: () => void;
+  onClose: () => void;
+}) {
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const touchState = useRef({
+    initialDistance: 0,
+    initialScale: 1,
+    startX: 0,
+    startY: 0,
+    initialPosX: 0,
+    initialPosY: 0,
+    isPinching: false,
+    isDragging: false,
+    lastTapTime: 0,
+  });
+
+  useEffect(() => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  }, [src]);
+
+  const getDistance = (t1: React.Touch, t2: React.Touch) => {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      touchState.current.initialDistance = dist;
+      touchState.current.initialScale = scale;
+      touchState.current.isPinching = true;
+      touchState.current.isDragging = false;
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - touchState.current.lastTapTime < 300) {
+        if (scale > 1) {
+          setScale(1);
+          setPosition({ x: 0, y: 0 });
+        } else {
+          setScale(2.5);
+        }
+        touchState.current.lastTapTime = 0;
+        return;
+      }
+      touchState.current.lastTapTime = now;
+
+      touchState.current.startX = e.touches[0].clientX;
+      touchState.current.startY = e.touches[0].clientY;
+      touchState.current.initialPosX = position.x;
+      touchState.current.initialPosY = position.y;
+      touchState.current.isDragging = true;
+      touchState.current.isPinching = false;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchState.current.isPinching && e.touches.length === 2) {
+      e.preventDefault();
+      const currentDist = getDistance(e.touches[0], e.touches[1]);
+      const newScale = Math.min(
+        Math.max(
+          1,
+          touchState.current.initialScale *
+            (currentDist / touchState.current.initialDistance)
+        ),
+        4
+      );
+      setScale(newScale);
+      if (newScale === 1) {
+        setPosition({ x: 0, y: 0 });
+      }
+    } else if (touchState.current.isDragging && e.touches.length === 1) {
+      const deltaX = e.touches[0].clientX - touchState.current.startX;
+      const deltaY = e.touches[0].clientY - touchState.current.startY;
+
+      if (scale > 1) {
+        e.preventDefault();
+        const maxOffset = 150 * (scale - 1);
+        const clampedX = Math.min(Math.max(touchState.current.initialPosX + deltaX, -maxOffset), maxOffset);
+        const clampedY = Math.min(Math.max(touchState.current.initialPosY + deltaY, -maxOffset), maxOffset);
+        setPosition({ x: clampedX, y: clampedY });
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchState.current.isPinching) {
+      touchState.current.isPinching = false;
+      if (scale <= 1.05) {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+      }
+    } else if (touchState.current.isDragging) {
+      touchState.current.isDragging = false;
+      if (scale === 1 && e.changedTouches.length === 1) {
+        const deltaX = e.changedTouches[0].clientX - touchState.current.startX;
+        const deltaY = e.changedTouches[0].clientY - touchState.current.startY;
+
+        if (Math.abs(deltaX) > 45 && Math.abs(deltaY) < 100) {
+          if (deltaX < 0) {
+            onSwipeLeft();
+          } else {
+            onSwipeRight();
+          }
+        }
+      }
+    }
+  };
+
+  const handleResetZoom = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden touch-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onClick={(e) => {
+        if (scale > 1) {
+          e.stopPropagation();
+        } else {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="max-h-[70vh] w-auto max-w-full flex items-center justify-center transition-transform duration-75 ease-out select-none"
+        style={{
+          transform: `translate3d(${position.x}px, ${position.y}px, 0) scale(${scale})`,
+          cursor: scale > 1 ? "grab" : "default",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt}
+          draggable={false}
+          className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl pointer-events-none select-none"
+        />
+      </div>
+
+      {scale > 1.05 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleResetZoom();
+          }}
+          className="absolute bottom-12 px-3 py-1.5 bg-black/75 hover:bg-black text-amber-300 text-xs font-semibold rounded-full backdrop-blur-md border border-white/10 flex items-center gap-1.5 shadow-lg z-30 cursor-pointer"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Resetuj powiększenie ({scale.toFixed(1)}x)</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PhotoParty() {
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -115,6 +296,7 @@ export default function PhotoParty() {
 
   const [myUploadedKeys, setMyUploadedKeys] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const [showQrModal, setShowQrModal] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
@@ -124,7 +306,7 @@ export default function PhotoParty() {
 
   const [gallery, setGallery] = useState<GalleryPhoto[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
-  const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const fetchGallery = useCallback(async () => {
     try {
@@ -144,7 +326,6 @@ export default function PhotoParty() {
   useEffect(() => {
     setMounted(true);
 
-    // Inicjalizacja trybu ciemnego
     const savedTheme = localStorage.getItem("photo_party_theme");
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const shouldBeDark = savedTheme === "dark" || (!savedTheme && systemPrefersDark);
@@ -256,6 +437,58 @@ export default function PhotoParty() {
     }
   };
 
+  // Obsługa zapisu prosto do Rolki zdjęć iPhone / Galerii Android lub pobierania na PC
+  const handleDownload = async (photo: GalleryPhoto) => {
+    const extension = photo.isVideo ? "mp4" : "jpg";
+    const mimeType = photo.isVideo ? "video/mp4" : "image/jpeg";
+    const cleanAuthor = photo.author.replace(/[^a-zA-Z0-9]/g, "_") || "Gosc";
+    const filename = `Wesele_Kinga_i_Kamil_${cleanAuthor}_${Date.now()}.${extension}`;
+
+    try {
+      setIsDownloading(true);
+
+      // Pobieramy plik przez nasze wewnętrzne proxy
+      const downloadEndpoint = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
+      const response = await fetch(downloadEndpoint);
+      if (!response.ok) throw new Error("Błąd pobierania pliku");
+      
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: mimeType });
+
+      // Sprawdzamy czy telefon wspiera natywne udostępnianie plików do Galerii
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          files: [file],
+          title: "Zdjęcie z wesela Kinga i Kamil",
+        });
+      } else {
+        // Standardowe pobieranie dla komputerów / przeglądarek bez navigator.share
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    } catch (error: unknown) {
+      // Jeśli użytkownik po prostu anulował systemowe okienko udostępniania, nie robimy błędu
+      if ((error as { name?: string })?.name !== "AbortError") {
+        console.error("Błąd podczas zapisu:", error);
+        // Ostateczny fallback – bezpośrednie przejście do linku download
+        const fallbackUrl = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
+        window.location.href = fallbackUrl;
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const uploadSingleFile = async (item: FileItem, currentAuthor: string): Promise<string> => {
     setFiles((prev) =>
       prev.map((f) => (f.id === item.id ? { ...f, status: "uploading", progress: 10 } : f))
@@ -357,7 +590,7 @@ export default function PhotoParty() {
   };
 
   const handleDeletePhoto = async (key: string) => {
-    if (!confirm("Czy na pewno chcesz usunąć to zdjęcie z albumu?")) return;
+    if (!confirm("Czy na pewno chcesz usunąć to zdjęcie/film z albumu?")) return;
 
     try {
       setIsDeleting(true);
@@ -372,11 +605,9 @@ export default function PhotoParty() {
         const updatedKeys = myUploadedKeys.filter((k) => k !== key);
         setMyUploadedKeys(updatedKeys);
         localStorage.setItem("photo_party_my_keys", JSON.stringify(updatedKeys));
-        if (selectedPhoto?.key === key) {
-          setSelectedPhoto(null);
-        }
+        setSelectedIndex(null);
       } else {
-        alert("Wystąpił błąd podczas usuwania zdjęcia.");
+        alert("Wystąpił błąd podczas usuwania pliku.");
       }
     } catch (err) {
       console.error("Błąd usuwania:", err);
@@ -399,6 +630,30 @@ export default function PhotoParty() {
     fetchGallery();
   };
 
+  const showNextPhoto = useCallback(() => {
+    if (selectedIndex !== null && gallery.length > 0) {
+      setSelectedIndex((prev) => (prev !== null ? (prev + 1) % gallery.length : 0));
+    }
+  }, [selectedIndex, gallery.length]);
+
+  const showPrevPhoto = useCallback(() => {
+    if (selectedIndex !== null && gallery.length > 0) {
+      setSelectedIndex((prev) => (prev !== null ? (prev - 1 + gallery.length) % gallery.length : 0));
+    }
+  }, [selectedIndex, gallery.length]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedIndex === null) return;
+      if (e.key === "ArrowRight") showNextPhoto();
+      if (e.key === "ArrowLeft") showPrevPhoto();
+      if (e.key === "Escape") setSelectedIndex(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedIndex, showNextPhoto, showPrevPhoto]);
+
   if (!mounted) {
     return (
       <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] flex items-center justify-center">
@@ -409,6 +664,7 @@ export default function PhotoParty() {
 
   const completedCount = files.filter((f) => f.status === "success").length;
   const isAuthorValid = author.trim().length > 0;
+  const selectedPhoto = selectedIndex !== null ? gallery[selectedIndex] : null;
 
   const qrImageUrl = currentUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
@@ -419,7 +675,7 @@ export default function PhotoParty() {
   return (
     <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200 transition-colors duration-200">
       {/* Pasek nawigacyjny */}
-      <header className="bg-white/95 dark:bg-[#141d18]/95 backdrop-blur-md border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center shadow-sm relative transition-colors">
+      <header className="bg-white dark:bg-[#141d18] border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center relative transition-colors duration-200 shadow-sm">
         <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-1">
           <span>Wesele</span>
           <Heart className="w-4 h-4 fill-rose-400 text-rose-400" />
@@ -432,7 +688,7 @@ export default function PhotoParty() {
         <div className="absolute right-4 top-4 flex items-center gap-2">
           <button
             onClick={toggleDarkMode}
-            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center justify-center shadow-sm"
+            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center justify-center shadow-sm"
             title={isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"}
           >
             {isDark ? (
@@ -444,7 +700,7 @@ export default function PhotoParty() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
             title="Pokaż kod QR"
           >
             <QrCode className="w-5 h-5 text-emerald-800 dark:text-emerald-400" />
@@ -514,9 +770,8 @@ export default function PhotoParty() {
               </p>
             </div>
 
-            {/* 3 Przyciski wyboru - szmaragdowy emerald-800 */}
+            {/* 3 Przyciski wyboru */}
             <div className="grid grid-cols-3 gap-2.5">
-              {/* 1. ZDJĘCIE */}
               <label
                 htmlFor="native-photo-input"
                 className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
@@ -537,7 +792,6 @@ export default function PhotoParty() {
                 />
               </label>
 
-              {/* 2. KAMERA / WIDEO */}
               <label
                 htmlFor="native-video-input"
                 className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
@@ -558,7 +812,6 @@ export default function PhotoParty() {
                 />
               </label>
 
-              {/* 3. GALERIA */}
               <label
                 htmlFor="native-gallery-input"
                 className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
@@ -602,7 +855,7 @@ export default function PhotoParty() {
               </div>
             )}
 
-            {/* Podgląd plików */}
+            {/* Podgląd plików przed wysłaniem */}
             {files.length > 0 && (
               <div className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b border-stone-100 dark:border-stone-800">
@@ -621,9 +874,22 @@ export default function PhotoParty() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {files.map((item) => (
-                    <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-100 dark:bg-[#111914] border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
+                    <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-900 border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
                       {item.file.type.startsWith("video/") ? (
-                        <video src={item.previewUrl || ""} className="absolute inset-0 w-full h-full object-cover" />
+                        <>
+                          <video 
+                            src={item.previewUrl ? `${item.previewUrl}#t=0.001` : ""} 
+                            preload="metadata"
+                            playsInline
+                            muted
+                            className="absolute inset-0 w-full h-full object-cover" 
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="p-2 bg-black/60 rounded-full text-white backdrop-blur-xs">
+                              <Play className="w-5 h-5 fill-white" />
+                            </div>
+                          </div>
+                        </>
                       ) : item.previewUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img 
@@ -774,17 +1040,31 @@ export default function PhotoParty() {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2">
-              {gallery.map((photo) => {
+              {gallery.map((photo, index) => {
                 const isMine = myUploadedKeys.includes(photo.key);
+                const videoSource = photo.isVideo ? `${photo.url}#t=0.001` : photo.url;
 
                 return (
                   <div
                     key={photo.key}
-                    onClick={() => setSelectedPhoto(photo)}
-                    className="relative group aspect-square rounded-xl overflow-hidden bg-stone-100 dark:bg-[#111914] border border-stone-200 dark:border-stone-800 cursor-pointer shadow-sm active:scale-95 transition"
+                    onClick={() => setSelectedIndex(index)}
+                    className="relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border border-stone-200 dark:border-stone-800 cursor-pointer shadow-sm active:scale-95 transition select-none"
                   >
                     {photo.isVideo ? (
-                      <video src={photo.url} className="w-full h-full object-cover pointer-events-none" />
+                      <>
+                        <video 
+                          src={videoSource}
+                          preload="metadata"
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover pointer-events-none" 
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="p-2 bg-black/60 rounded-full text-white backdrop-blur-xs group-hover:scale-110 transition">
+                            <Play className="w-4 h-4 fill-white" />
+                          </div>
+                        </div>
+                      </>
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -804,14 +1084,14 @@ export default function PhotoParty() {
                           handleDeletePhoto(photo.key);
                         }}
                         disabled={isDeleting}
-                        title="Usuń to zdjęcie"
+                        title="Usuń ten plik"
                         className="absolute top-1 right-1 z-10 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg transition shadow-md cursor-pointer flex items-center justify-center"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-1.5 opacity-90 group-hover:opacity-100">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-1.5 opacity-90 group-hover:opacity-100 pointer-events-none">
                       <span className="text-[10px] text-white font-medium truncate">
                         {photo.author}
                       </span>
@@ -849,7 +1129,7 @@ export default function PhotoParty() {
 
             <div className="pt-2">
               <div className="flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 mb-1">
-                <span>Zeskanuj aparatami</span>
+                <span>Zeskanuj aparatem</span>
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               </div>
               <h3 className="text-xl font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">
@@ -896,55 +1176,127 @@ export default function PhotoParty() {
         </div>
       )}
 
-      {/* Lightbox */}
-      {selectedPhoto && (
+      {/* Lightbox / Odtwarzacz z Pinch-to-Zoom i pobieraniem */}
+      {selectedPhoto && selectedIndex !== null && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4"
-          onClick={() => setSelectedPhoto(null)}
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 select-none overflow-hidden"
+          onClick={() => setSelectedIndex(null)}
         >
-          <div className="absolute top-4 inset-x-4 flex justify-between items-center z-10">
-            {myUploadedKeys.includes(selectedPhoto.key) ? (
+          {/* Górny pasek nawigacyjny lightboxa */}
+          <div className="absolute top-4 inset-x-4 flex justify-between items-center z-30 pointer-events-none">
+            <div className="text-xs font-bold tracking-wider text-stone-400 px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-full border border-white/10 pointer-events-auto">
+              {selectedIndex + 1} / {gallery.length}
+            </div>
+
+            <div className="flex items-center gap-2 pointer-events-auto">
+              {/* Przycisk Pobierz / Zapisz do Galerii */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeletePhoto(selectedPhoto.key);
+                  handleDownload(selectedPhoto);
                 }}
-                disabled={isDeleting}
-                className="p-3 text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-lg"
-                title="Usuń zdjęcie"
+                disabled={isDownloading}
+                className="p-2.5 sm:p-3 text-white bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-lg"
+                title="Pobierz zdjęcie/film"
               >
-                {isDeleting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                {isDownloading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <Trash2 className="w-5 h-5" />
-                    <span>Usuń moje zdjęcie</span>
+                    <Download className="w-4 h-4" />
+                    <span className="hidden sm:inline">Pobierz</span>
                   </>
                 )}
               </button>
-            ) : <div />}
 
-            <button
-              onClick={() => setSelectedPhoto(null)}
-              className="p-3 text-white bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer ml-auto"
-            >
-              <X className="w-6 h-6 stroke-[2.5]" />
-            </button>
+              {/* Przycisk Usuń (jeśli moje) */}
+              {myUploadedKeys.includes(selectedPhoto.key) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeletePhoto(selectedPhoto.key);
+                  }}
+                  disabled={isDeleting}
+                  className="p-2.5 sm:p-3 text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-lg"
+                  title="Usuń plik"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span className="hidden sm:inline">Usuń</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {/* Przycisk Zamknij */}
+              <button
+                onClick={() => setSelectedIndex(null)}
+                className="p-2.5 sm:p-3 text-white bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer"
+                title="Zamknij"
+              >
+                <X className="w-5 h-5 stroke-[2.5]" />
+              </button>
+            </div>
           </div>
 
-          <div className="max-w-xl w-full max-h-[80vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+          {/* Boczny przycisk: Poprzednie */}
+          {gallery.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                showPrevPhoto();
+              }}
+              className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer backdrop-blur-md active:scale-90"
+              title="Poprzednie zdjęcie"
+            >
+              <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+            </button>
+          )}
+
+          {/* Boczny przycisk: Następne */}
+          {gallery.length > 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                showNextPhoto();
+              }}
+              className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer backdrop-blur-md active:scale-90"
+              title="Następne zdjęcie"
+            >
+              <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+            </button>
+          )}
+
+          {/* Obszar zawartości (Zdjęcie z pinch-to-zoom / Wideo) */}
+          <div 
+            className="w-full h-full max-h-[85vh] flex flex-col items-center justify-center relative z-10 px-2"
+            onClick={(e) => e.stopPropagation()}
+          >
             {selectedPhoto.isVideo ? (
-              <video src={selectedPhoto.url} controls autoPlay className="max-h-[70vh] rounded-2xl shadow-2xl" />
+              <video 
+                key={selectedPhoto.key}
+                src={selectedPhoto.url} 
+                controls 
+                autoPlay 
+                playsInline
+                className="max-h-[70vh] w-full rounded-2xl shadow-2xl bg-black" 
+              />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ZoomableImage
                 src={selectedPhoto.url}
                 alt={`Zdjęcie od ${selectedPhoto.author}`}
-                className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl"
+                onSwipeLeft={showNextPhoto}
+                onSwipeRight={showPrevPhoto}
+                onClose={() => setSelectedIndex(null)}
               />
             )}
-            <div className="mt-3 text-center text-white">
+
+            <div className="mt-2 text-center text-white pointer-events-none">
               <p className="text-sm font-semibold text-amber-300">Dodane przez: {selectedPhoto.author}</p>
             </div>
           </div>
