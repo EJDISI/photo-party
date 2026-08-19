@@ -28,7 +28,8 @@ import {
   RotateCcw, 
   Download, 
   Crown, 
-  ChevronDown 
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 interface FileItem {
@@ -324,12 +325,15 @@ export default function PhotoParty() {
   const [copied, setCopied] = useState(false);
 
   const authorInputRef = useRef<HTMLInputElement>(null);
+  const gallerySectionRef = useRef<HTMLElement>(null);
 
   const [rawGallery, setRawGallery] = useState<GalleryPhoto[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  const [visibleCount, setVisibleCount] = useState(18);
+  // Domyślnie 12 kafelków
+  const INITIAL_VISIBLE_COUNT = 12;
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
   const fetchGallery = useCallback(async () => {
     try {
@@ -643,7 +647,6 @@ export default function PhotoParty() {
       setMyUploadedKeys(newKeysList);
       localStorage.setItem("photo_party_my_keys", JSON.stringify(newKeysList));
 
-      // Czyszczenie podglądów z pamięci
       files.forEach((f) => {
         if (f.previewUrl) {
           try {
@@ -655,7 +658,6 @@ export default function PhotoParty() {
 
       fetchGallery();
 
-      // Wyświetlenie lekkiego powiadomienia (Toast)
       setToastMessage(`Pomyślnie dodano ${uploadedCount} ${uploadedCount === 1 ? "plik" : "pliki"}! ❤️`);
       setTimeout(() => {
         setToastMessage(null);
@@ -708,6 +710,11 @@ export default function PhotoParty() {
     }
   }, [selectedIndex, gallery.length]);
 
+  const handleCollapseGallery = () => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+    gallerySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedIndex === null) return;
@@ -734,7 +741,7 @@ export default function PhotoParty() {
 
   return (
     <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200 transition-colors duration-200">
-      {/* Lekkie powiadomienie sukcesu na górze ekranu */}
+      {/* Lekkie powiadomienie sukcesu */}
       <div 
         className={`fixed top-4 inset-x-4 z-50 max-w-sm mx-auto transition-all duration-300 pointer-events-none ${
           toastMessage 
@@ -962,42 +969,42 @@ export default function PhotoParty() {
                   )}
 
                   {!isUploading && item.status === "idle" && (
-                    <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
-                      {!item.file.type.startsWith("video/") ? (
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => toggleFlip(item.id)}
-                            title="Odbij lustrzanie"
-                            className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
-                              item.isFlipped 
-                                ? "bg-amber-400 text-stone-950 font-bold scale-105" 
-                                : "bg-black/75 hover:bg-black text-white"
-                            }`}
-                          >
-                            <FlipHorizontal className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
+                          {!item.file.type.startsWith("video/") ? (
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleFlip(item.id)}
+                                title="Odbij lustrzanie"
+                                className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
+                                  item.isFlipped 
+                                    ? "bg-amber-400 text-stone-950 font-bold scale-105" 
+                                    : "bg-black/75 hover:bg-black text-white"
+                                }`}
+                              >
+                                <FlipHorizontal className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => rotatePhoto(item.id)}
+                                title="Obróć o 90°"
+                                className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
+                              >
+                                <RotateCw className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : <div />}
 
                           <button
                             type="button"
-                            onClick={() => rotatePhoto(item.id)}
-                            title="Obróć o 90°"
-                            className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
+                            onClick={() => removeFile(item.id)}
+                            title="Usuń"
+                            className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
                           >
-                            <RotateCw className="w-3.5 h-3.5" />
+                            <X className="w-3.5 h-3.5 stroke-[3]" />
                           </button>
                         </div>
-                      ) : <div />}
-
-                      <button
-                        type="button"
-                        onClick={() => removeFile(item.id)}
-                        title="Usuń"
-                        className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
-                      >
-                        <X className="w-3.5 h-3.5 stroke-[3]" />
-                      </button>
-                    </div>
                   )}
 
                   {item.isFlipped && (
@@ -1063,7 +1070,7 @@ export default function PhotoParty() {
         )}
 
         {/* Wspólna Galeria */}
-        <section className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6">
+        <section ref={gallerySectionRef} className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6 scroll-mt-20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
@@ -1120,7 +1127,7 @@ export default function PhotoParty() {
                         <>
                           <video 
                             src={videoSource}
-                            preload="none"
+                            preload="metadata"
                             playsInline
                             muted
                             className="w-full h-full object-cover pointer-events-none" 
@@ -1184,16 +1191,30 @@ export default function PhotoParty() {
                 })}
               </div>
 
-              {visibleCount < gallery.length && (
-                <button
-                  type="button"
-                  onClick={() => setVisibleCount((prev) => prev + 18)}
-                  className="w-full py-3 bg-stone-100 hover:bg-stone-200 dark:bg-[#1a261f] dark:hover:bg-[#203027] text-stone-700 dark:text-stone-300 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer mt-3"
-                >
-                  <ChevronDown className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                  <span>Pokaż więcej zdjęć ({gallery.length - visibleCount} pozostało)</span>
-                </button>
-              )}
+              {/* Przyciski: Rozwiń (Pokaż więcej) / Zwiń */}
+              <div className="flex flex-col gap-2 mt-3">
+                {visibleCount < gallery.length && (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + 12)}
+                    className="w-full py-3 bg-stone-100 hover:bg-stone-200 dark:bg-[#1a261f] dark:hover:bg-[#203027] text-stone-700 dark:text-stone-300 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <ChevronDown className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                    <span>Pokaż więcej wspomnień ({gallery.length - visibleCount} pozostało)</span>
+                  </button>
+                )}
+
+                {visibleCount > INITIAL_VISIBLE_COUNT && (
+                  <button
+                    type="button"
+                    onClick={handleCollapseGallery}
+                    className="w-full py-2.5 bg-transparent hover:bg-stone-100 dark:hover:bg-[#1a261f] text-stone-500 dark:text-stone-400 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200 dark:border-stone-800"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                    <span>Zwiń galerię (do 12 ujęć)</span>
+                  </button>
+                )}
+              </div>
             </>
           )}
         </section>
