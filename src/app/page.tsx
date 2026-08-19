@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import QRCode from "react-qr-code";
 import { 
   Camera, 
   Video,
@@ -13,24 +14,22 @@ import {
   Heart, 
   AlertCircle, 
   RefreshCw, 
-  Maximize2,
-  FlipHorizontal,
-  RotateCw,
-  QrCode,
-  Copy,
-  Check,
-  Trash2,
-  Moon,
-  Sun,
-  Play,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Download,
-  Crown,
-  ChevronDown
+  FlipHorizontal, 
+  RotateCw, 
+  QrCode, 
+  Copy, 
+  Check, 
+  Trash2, 
+  Moon, 
+  Sun, 
+  Play, 
+  ChevronLeft, 
+  ChevronRight, 
+  RotateCcw, 
+  Download, 
+  Crown, 
+  ChevronDown 
 } from "lucide-react";
-import confetti from "canvas-confetti";
 
 interface FileItem {
   id: string;
@@ -53,7 +52,6 @@ interface GalleryPhoto {
   likes: number;
 }
 
-// Funkcja przetwarzająca i kompresująca zdjęcia do max 2560px przy zachowaniu ostrości
 const applyTransformations = async (item: FileItem): Promise<File> => {
   if (item.file.type.startsWith("video/")) {
     return item.file;
@@ -313,7 +311,8 @@ export default function PhotoParty() {
   const [author, setAuthor] = useState("");
   const [authorError, setAuthorError] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [myUploadedKeys, setMyUploadedKeys] = useState<string[]>([]);
   const [myLikedKeys, setMyLikedKeys] = useState<string[]>([]);
@@ -330,7 +329,6 @@ export default function PhotoParty() {
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  // Paginacja galerii w celu ochrony RAM-u starszych telefonów
   const [visibleCount, setVisibleCount] = useState(18);
 
   const fetchGallery = useCallback(async () => {
@@ -492,10 +490,6 @@ export default function PhotoParty() {
     const isLiked = myLikedKeys.includes(key);
     const action = isLiked ? "unlike" : "like";
 
-    const currentTop1Key = rawGallery.length > 0 
-      ? [...rawGallery].sort((a, b) => b.likes - a.likes)[0]?.key 
-      : null;
-
     const newRawGallery = rawGallery.map((p) => {
       if (p.key === key) {
         return { ...p, likes: Math.max(0, p.likes + (isLiked ? -1 : 1)) };
@@ -508,17 +502,6 @@ export default function PhotoParty() {
     const updatedLikes = isLiked ? myLikedKeys.filter((k) => k !== key) : [...myLikedKeys, key];
     setMyLikedKeys(updatedLikes);
     localStorage.setItem("photo_party_my_liked_keys", JSON.stringify(updatedLikes));
-
-    if (!isLiked) {
-      const newTop1 = [...newRawGallery].sort((a, b) => b.likes - a.likes)[0];
-      if (newTop1 && newTop1.key === key && newTop1.likes > 0 && currentTop1Key !== key) {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      }
-    }
 
     try {
       await fetch("/api/photos/like", {
@@ -653,23 +636,31 @@ export default function PhotoParty() {
     setIsUploading(true);
 
     try {
+      const uploadedCount = files.length;
       const uploadedKeys = await Promise.all(files.map((item) => uploadSingleFile(item, author)));
       
       const newKeysList = [...myUploadedKeys, ...uploadedKeys.filter(Boolean)];
       setMyUploadedKeys(newKeysList);
       localStorage.setItem("photo_party_my_keys", JSON.stringify(newKeysList));
 
-      confetti({
-        particleCount: 140,
-        spread: 80,
-        origin: { y: 0.6 },
+      // Czyszczenie podglądów z pamięci
+      files.forEach((f) => {
+        if (f.previewUrl) {
+          try {
+            URL.revokeObjectURL(f.previewUrl);
+          } catch {}
+        }
       });
+      setFiles([]);
 
       fetchGallery();
 
+      // Wyświetlenie lekkiego powiadomienia (Toast)
+      setToastMessage(`Pomyślnie dodano ${uploadedCount} ${uploadedCount === 1 ? "plik" : "pliki"}! ❤️`);
       setTimeout(() => {
-        setIsComplete(true);
-      }, 1000);
+        setToastMessage(null);
+      }, 4000);
+
     } catch (error) {
       console.error("Błąd wysyłania:", error);
     } finally {
@@ -703,19 +694,6 @@ export default function PhotoParty() {
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const handleReset = () => {
-    files.forEach((f) => {
-      if (f.previewUrl) {
-        try {
-          URL.revokeObjectURL(f.previewUrl);
-        } catch {}
-      }
-    });
-    setFiles([]);
-    setIsComplete(false);
-    fetchGallery();
   };
 
   const showNextPhoto = useCallback(() => {
@@ -754,14 +732,22 @@ export default function PhotoParty() {
   const isAuthorValid = author.trim().length > 0;
   const selectedPhoto = selectedIndex !== null ? gallery[selectedIndex] : null;
 
-  const qrImageUrl = currentUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
-        currentUrl
-      )}&color=${isDark ? "e6ede8" : "065f46"}&bgcolor=${isDark ? "19231d" : "ffffff"}`
-    : "";
-
   return (
     <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200 transition-colors duration-200">
+      {/* Lekkie powiadomienie sukcesu na górze ekranu */}
+      <div 
+        className={`fixed top-4 inset-x-4 z-50 max-w-sm mx-auto transition-all duration-300 pointer-events-none ${
+          toastMessage 
+            ? "opacity-100 translate-y-0 scale-100" 
+            : "opacity-0 -translate-y-4 scale-95"
+        }`}
+      >
+        <div className="bg-[#123824] text-white px-4 py-3 rounded-2xl shadow-xl border border-emerald-500/30 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
+        </div>
+      </div>
+
       {/* Pasek nawigacyjny */}
       <header className="bg-white dark:bg-[#141d18] border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center relative transition-colors duration-200 shadow-sm">
         <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-1">
@@ -772,7 +758,7 @@ export default function PhotoParty() {
           Kinga i Kamil
         </h1>
 
-        {/* Przyciski w nagłówku: Tryb Ciemny & QR */}
+        {/* Przyciski w nagłówku */}
         <div className="absolute right-4 top-4 flex items-center gap-2">
           <button
             onClick={toggleDarkMode}
@@ -798,307 +784,285 @@ export default function PhotoParty() {
       </header>
 
       <div className="max-w-md mx-auto px-4 mt-6 space-y-6">
-        {/* Ekran po wysłaniu */}
-        {isComplete ? (
-          <div className="bg-white dark:bg-[#16201a] rounded-3xl p-6 shadow-sm text-center border border-[#e8e2d8] dark:border-[#22332a] space-y-4">
-            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/50 rounded-full flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">Wszystko wgrane! ❤️</h2>
-            <p className="text-stone-600 dark:text-stone-300 text-sm leading-relaxed">
-              Dziękujemy, <span className="font-semibold text-[#1f2d27] dark:text-white">{author}</span>! Twoje pamiątki pojawiły się we wspólnej galerii poniżej.
-            </p>
-            <button
-              onClick={handleReset}
-              className="w-full py-3.5 bg-emerald-800 hover:bg-emerald-900 text-[#f4efe6] font-semibold rounded-2xl transition shadow-sm flex items-center justify-center gap-2 cursor-pointer text-sm"
-            >
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              Dodaj kolejne zdjęcia lub filmy
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="text-center px-2">
-              <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed font-light">
-                Cieszymy się, że jesteście z nami! Podzielcie się swoimi zdjęciami i filmami z wesela.
-              </p>
-            </div>
+        <div className="text-center px-2">
+          <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed font-light">
+            Cieszymy się, że jesteście z nami! Podzielcie się swoimi zdjęciami i filmami z wesela.
+          </p>
+        </div>
 
-            {/* Formularz podpisu */}
-            <div className={`bg-white dark:bg-[#16201a] p-5 rounded-2xl border transition-all shadow-sm ${
-              authorError 
-                ? "border-rose-400 ring-2 ring-rose-200 dark:ring-rose-950" 
-                : "border-[#e8e2d8] dark:border-[#22332a]"
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase tracking-wider">
-                  Twój podpis <span className="text-rose-500">*</span>
-                </label>
-                {authorError && (
-                  <span className="text-[11px] font-semibold text-rose-500 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" /> Podpis jest wymagany!
-                  </span>
-                )}
-              </div>
-              <input
-                ref={authorInputRef}
-                type="text"
-                value={author}
-                onChange={(e) => handleAuthorChange(e.target.value)}
-                placeholder="np. Szwagier, Świadkowie, Ciocia Kasia..."
-                className={`w-full px-4 py-3 bg-[#faf8f5] dark:bg-[#111914] text-[#2c3e35] dark:text-[#f2f7f4] border rounded-xl text-sm transition focus:outline-none focus:ring-2 ${
-                  authorError
-                    ? "border-rose-300 focus:ring-rose-400 bg-rose-50/40 dark:bg-rose-950/20"
-                    : "border-stone-200 dark:border-stone-800 focus:ring-emerald-800 dark:focus:ring-emerald-600"
-                }`}
-                disabled={isUploading}
-              />
-              <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-1.5 font-light">
-                Podpis pojawi się przy Twoich zdjęciach i filmach we wspólnej galerii.
-              </p>
-            </div>
-
-            {/* 3 Przyciski wyboru */}
-            <div className="grid grid-cols-3 gap-2.5">
-              <label
-                htmlFor="native-photo-input"
-                className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
-              >
-                <Camera className="w-6 h-6 text-amber-300" />
-                <span className="text-[11px] font-semibold leading-tight">Zrób zdjęcie</span>
-                <input
-                  id="native-photo-input"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={isUploading}
-                  onChange={(e) => {
-                    handleFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="sr-only"
-                />
-              </label>
-
-              <label
-                htmlFor="native-video-input"
-                className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
-              >
-                <Video className="w-6 h-6 text-amber-300" />
-                <span className="text-[11px] font-semibold leading-tight">Nagraj film</span>
-                <input
-                  id="native-video-input"
-                  type="file"
-                  accept="video/*"
-                  capture="environment"
-                  disabled={isUploading}
-                  onChange={(e) => {
-                    handleFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="sr-only"
-                />
-              </label>
-
-              <label
-                htmlFor="native-gallery-input"
-                className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
-              >
-                <ImageIcon className="w-6 h-6 text-amber-300" />
-                <span className="text-[11px] font-semibold leading-tight">Z galerii</span>
-                <input
-                  id="native-gallery-input"
-                  type="file"
-                  accept="image/*,video/*,video/mp4,video/quicktime,video/webm,.mov,.mp4"
-                  multiple
-                  disabled={isUploading}
-                  onChange={(e) => {
-                    handleFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="sr-only"
-                />
-              </label>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowQrModal(true)}
-              className="w-full py-3 bg-white dark:bg-[#16201a] hover:bg-stone-50 dark:hover:bg-[#1c2921] border border-[#e8e2d8] dark:border-[#22332a] rounded-2xl text-xs font-semibold text-stone-700 dark:text-stone-200 flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99] cursor-pointer"
-            >
-              <QrCode className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
-              <span>Pokaż kod QR gościom obok 📲</span>
-            </button>
-
-            {/* Pasek postępu */}
-            {isUploading && (
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
-                <Loader2 className="w-6 h-6 text-emerald-800 dark:text-emerald-400 animate-spin shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                    Wgrywanie ({completedCount} z {files.length} gotowe)
-                  </p>
-                  <p className="text-[11px] text-emerald-800 dark:text-emerald-400">Prosimy nie zamykać strony.</p>
-                </div>
-              </div>
+        {/* Formularz podpisu */}
+        <div className={`bg-white dark:bg-[#16201a] p-5 rounded-2xl border transition-all shadow-sm ${
+          authorError 
+            ? "border-rose-400 ring-2 ring-rose-200 dark:ring-rose-950" 
+            : "border-[#e8e2d8] dark:border-[#22332a]"
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase tracking-wider">
+              Twój podpis <span className="text-rose-500">*</span>
+            </label>
+            {authorError && (
+              <span className="text-[11px] font-semibold text-rose-500 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> Podpis jest wymagany!
+              </span>
             )}
+          </div>
+          <input
+            ref={authorInputRef}
+            type="text"
+            value={author}
+            onChange={(e) => handleAuthorChange(e.target.value)}
+            placeholder="np. Szwagier, Świadkowie, Ciocia Kasia..."
+            className={`w-full px-4 py-3 bg-[#faf8f5] dark:bg-[#111914] text-[#2c3e35] dark:text-[#f2f7f4] border rounded-xl text-sm transition focus:outline-none focus:ring-2 ${
+              authorError
+                ? "border-rose-300 focus:ring-rose-400 bg-rose-50/40 dark:bg-rose-950/20"
+                : "border-stone-200 dark:border-stone-800 focus:ring-emerald-800 dark:focus:ring-emerald-600"
+            }`}
+            disabled={isUploading}
+          />
+          <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-1.5 font-light">
+            Podpis pojawi się przy Twoich zdjęciach i filmach we wspólnej galerii.
+          </p>
+        </div>
 
-            {/* Podgląd plików przed wysłaniem */}
-            {files.length > 0 && (
-              <div className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-stone-100 dark:border-stone-800">
-                  <span className="text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">
-                    Wybrane pliki ({files.length})
-                  </span>
-                  {!isUploading && (
-                    <button
-                      onClick={() => setFiles([])}
-                      className="text-xs text-rose-500 hover:underline cursor-pointer"
-                    >
-                      Wyczyść wszystko
-                    </button>
-                  )}
-                </div>
+        {/* 3 Przyciski wyboru */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <label
+            htmlFor="native-photo-input"
+            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
+          >
+            <Camera className="w-6 h-6 text-amber-300" />
+            <span className="text-[11px] font-semibold leading-tight">Zrób zdjęcie</span>
+            <input
+              id="native-photo-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={isUploading}
+              onChange={(e) => {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }}
+              className="sr-only"
+            />
+          </label>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {files.map((item) => (
-                    <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-900 border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
-                      {item.file.type.startsWith("video/") ? (
-                        <>
-                          <video 
-                            src={item.previewUrl ? `${item.previewUrl}#t=0.001` : ""} 
-                            preload="metadata"
-                            playsInline
-                            muted
-                            className="absolute inset-0 w-full h-full object-cover" 
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="p-2 bg-black/60 rounded-full text-white">
-                              <Play className="w-5 h-5 fill-white" />
-                            </div>
-                          </div>
-                        </>
-                      ) : item.previewUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img 
-                          src={item.previewUrl} 
-                          alt="preview" 
-                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-150" 
-                          style={{
-                            transform: `rotate(${item.rotation}deg) scaleX(${item.isFlipped ? -1 : 1})`
-                          }}
-                        />
-                      ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-stone-200 dark:bg-stone-800">
-                          <ImageIcon className="w-6 h-6 text-stone-400 mb-1" />
-                          <span className="text-[10px] text-stone-600 dark:text-stone-300 truncate max-w-full px-1">{item.name}</span>
+          <label
+            htmlFor="native-video-input"
+            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
+          >
+            <Video className="w-6 h-6 text-amber-300" />
+            <span className="text-[11px] font-semibold leading-tight">Nagraj film</span>
+            <input
+              id="native-video-input"
+              type="file"
+              accept="video/*"
+              capture="environment"
+              disabled={isUploading}
+              onChange={(e) => {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }}
+              className="sr-only"
+            />
+          </label>
+
+          <label
+            htmlFor="native-gallery-input"
+            className="flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-emerald-800 hover:bg-emerald-900 active:scale-[0.98] text-[#f4efe6] rounded-2xl shadow-sm cursor-pointer select-none text-center transition"
+          >
+            <ImageIcon className="w-6 h-6 text-amber-300" />
+            <span className="text-[11px] font-semibold leading-tight">Z galerii</span>
+            <input
+              id="native-gallery-input"
+              type="file"
+              accept="image/*,video/*,video/mp4,video/quicktime,video/webm,.mov,.mp4"
+              multiple
+              disabled={isUploading}
+              onChange={(e) => {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }}
+              className="sr-only"
+            />
+          </label>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowQrModal(true)}
+          className="w-full py-3 bg-white dark:bg-[#16201a] hover:bg-stone-50 dark:hover:bg-[#1c2921] border border-[#e8e2d8] dark:border-[#22332a] rounded-2xl text-xs font-semibold text-stone-700 dark:text-stone-200 flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.99] cursor-pointer"
+        >
+          <QrCode className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
+          <span>Pokaż kod QR gościom obok 📲</span>
+        </button>
+
+        {/* Pasek postępu */}
+        {isUploading && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+            <Loader2 className="w-6 h-6 text-emerald-800 dark:text-emerald-400 animate-spin shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                Wgrywanie ({completedCount} z {files.length} gotowe)
+              </p>
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-400">Prosimy nie zamykać strony.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Podgląd plików przed wysłaniem */}
+        {files.length > 0 && (
+          <div className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-stone-100 dark:border-stone-800">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">
+                Wybrane pliki ({files.length})
+              </span>
+              {!isUploading && (
+                <button
+                  onClick={() => setFiles([])}
+                  className="text-xs text-rose-500 hover:underline cursor-pointer"
+                >
+                  Wyczyść wszystko
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {files.map((item) => (
+                <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-stone-900 border-2 border-stone-200 dark:border-stone-800 flex flex-col justify-end shadow-sm">
+                  {item.file.type.startsWith("video/") ? (
+                    <>
+                      <video 
+                        src={item.previewUrl ? `${item.previewUrl}#t=0.001` : ""} 
+                        preload="metadata"
+                        playsInline
+                        muted
+                        className="absolute inset-0 w-full h-full object-cover" 
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="p-2 bg-black/60 rounded-full text-white">
+                          <Play className="w-5 h-5 fill-white" />
                         </div>
-                      )}
+                      </div>
+                    </>
+                  ) : item.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img 
+                      src={item.previewUrl} 
+                      alt="preview" 
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-150" 
+                      style={{
+                        transform: `rotate(${item.rotation}deg) scaleX(${item.isFlipped ? -1 : 1})`
+                      }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-stone-200 dark:bg-stone-800">
+                      <ImageIcon className="w-6 h-6 text-stone-400 mb-1" />
+                      <span className="text-[10px] text-stone-600 dark:text-stone-300 truncate max-w-full px-1">{item.name}</span>
+                    </div>
+                  )}
 
-                      {!isUploading && item.status === "idle" && (
-                        <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
-                          {!item.file.type.startsWith("video/") ? (
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => toggleFlip(item.id)}
-                                title="Odbij lustrzanie"
-                                className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
-                                  item.isFlipped 
-                                    ? "bg-amber-400 text-stone-950 font-bold scale-105" 
-                                    : "bg-black/75 hover:bg-black text-white"
-                                }`}
-                              >
-                                <FlipHorizontal className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => rotatePhoto(item.id)}
-                                title="Obróć o 90°"
-                                className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
-                              >
-                                <RotateCw className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : <div />}
+                  {!isUploading && item.status === "idle" && (
+                    <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
+                      {!item.file.type.startsWith("video/") ? (
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleFlip(item.id)}
+                            title="Odbij lustrzanie"
+                            className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
+                              item.isFlipped 
+                                ? "bg-amber-400 text-stone-950 font-bold scale-105" 
+                                : "bg-black/75 hover:bg-black text-white"
+                            }`}
+                          >
+                            <FlipHorizontal className="w-3.5 h-3.5" />
+                          </button>
 
                           <button
                             type="button"
-                            onClick={() => removeFile(item.id)}
-                            title="Usuń"
-                            className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
+                            onClick={() => rotatePhoto(item.id)}
+                            title="Obróć o 90°"
+                            className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
                           >
-                            <X className="w-3.5 h-3.5 stroke-[3]" />
+                            <RotateCw className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      )}
+                      ) : <div />}
 
-                      {item.isFlipped && (
-                        <div className="absolute bottom-2 left-2 z-10 bg-amber-400 text-stone-950 font-bold px-2 py-0.5 rounded-md text-[9px] shadow-sm uppercase tracking-wider">
-                          Odbite ↔
-                        </div>
-                      )}
-
-                      {item.status === "uploading" && (
-                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-3 text-white z-10">
-                          <Loader2 className="w-7 h-7 text-amber-300 animate-spin mb-1" />
-                          <span className="text-xs font-bold tracking-wider">Wgrywanie...</span>
-                          <span className="text-[11px] text-amber-200 font-semibold">{item.progress}%</span>
-                          <div className="w-full bg-white/30 h-1.5 rounded-full mt-2 overflow-hidden">
-                            <div className="bg-amber-300 h-full transition-all duration-150" style={{ width: `${item.progress}%` }} />
-                          </div>
-                        </div>
-                      )}
-
-                      {item.status === "success" && (
-                        <div className="absolute inset-0 bg-emerald-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
-                          <CheckCircle2 className="w-9 h-9 text-emerald-400 mb-1" />
-                          <span className="text-xs font-bold text-emerald-200">Wgrano! ✅</span>
-                        </div>
-                      )}
-
-                      {item.status === "error" && (
-                        <div className="absolute inset-0 bg-rose-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
-                          <AlertCircle className="w-8 h-8 text-rose-400 mb-1" />
-                          <span className="text-[11px] font-bold text-rose-200 text-center">Błąd</span>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeFile(item.id)}
+                        title="Usuń"
+                        className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
+                      >
+                        <X className="w-3.5 h-3.5 stroke-[3]" />
+                      </button>
                     </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={handleUploadAll}
-                  disabled={isUploading}
-                  className={`w-full py-4 font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 mt-4 cursor-pointer text-sm sm:text-base ${
-                    !isAuthorValid
-                      ? "bg-stone-300 dark:bg-stone-800 text-stone-500 dark:text-stone-600 cursor-not-allowed"
-                      : "bg-emerald-800 hover:bg-emerald-900 active:scale-[0.99] text-white"
-                  }`}
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
-                      <span>Wgrywanie ({completedCount}/{files.length})...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UploadCloud className="w-5 h-5 text-amber-300" />
-                      <span>
-                        {!isAuthorValid 
-                          ? "Wpisz swój podpis powyżej" 
-                          : `Prześlij wspomnienia (${files.length})`}
-                      </span>
-                    </>
                   )}
-                </button>
-              </div>
-            )}
-          </>
+
+                  {item.isFlipped && (
+                    <div className="absolute bottom-2 left-2 z-10 bg-amber-400 text-stone-950 font-bold px-2 py-0.5 rounded-md text-[9px] shadow-sm uppercase tracking-wider">
+                      Odbite ↔
+                    </div>
+                  )}
+
+                  {item.status === "uploading" && (
+                    <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-3 text-white z-10">
+                      <Loader2 className="w-7 h-7 text-amber-300 animate-spin mb-1" />
+                      <span className="text-xs font-bold tracking-wider">Wgrywanie...</span>
+                      <span className="text-[11px] text-amber-200 font-semibold">{item.progress}%</span>
+                      <div className="w-full bg-white/30 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div className="bg-amber-300 h-full transition-all duration-150" style={{ width: `${item.progress}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {item.status === "success" && (
+                    <div className="absolute inset-0 bg-emerald-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
+                      <CheckCircle2 className="w-9 h-9 text-emerald-400 mb-1" />
+                      <span className="text-xs font-bold text-emerald-200">Wgrano! ✅</span>
+                    </div>
+                  )}
+
+                  {item.status === "error" && (
+                    <div className="absolute inset-0 bg-rose-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
+                      <AlertCircle className="w-8 h-8 text-rose-400 mb-1" />
+                      <span className="text-[11px] font-bold text-rose-200 text-center">Błąd</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleUploadAll}
+              disabled={isUploading}
+              className={`w-full py-4 font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 mt-4 cursor-pointer text-sm sm:text-base ${
+                !isAuthorValid
+                  ? "bg-stone-300 dark:bg-stone-800 text-stone-500 dark:text-stone-600 cursor-not-allowed"
+                  : "bg-emerald-800 hover:bg-emerald-900 active:scale-[0.99] text-white"
+              }`}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-300" />
+                  <span>Wgrywanie ({completedCount}/{files.length})...</span>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="w-5 h-5 text-amber-300" />
+                  <span>
+                    {!isAuthorValid 
+                      ? "Wpisz swój podpis powyżej" 
+                      : `Prześlij wspomnienia (${files.length})`}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
         )}
 
-        {/* Wspólna Galeria z optymalizacją ilości elementów DOM */}
+        {/* Wspólna Galeria */}
         <section className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1220,7 +1184,6 @@ export default function PhotoParty() {
                 })}
               </div>
 
-              {/* Przycisk doładowania kolejnych zdjęć (chroni pamięć starszych telefonów) */}
               {visibleCount < gallery.length && (
                 <button
                   type="button"
@@ -1264,15 +1227,19 @@ export default function PhotoParty() {
             </div>
 
             <div className="bg-[#faf8f5] dark:bg-[#111914] p-4 rounded-2xl border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-inner">
-              {qrImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={qrImageUrl}
-                  alt="Kod QR do albumu weselnego"
-                  className="w-[200px] h-[200px] rounded-xl object-contain"
-                />
+              {currentUrl ? (
+                <div className="p-2 bg-white rounded-xl shadow-xs">
+                  <QRCode
+                    value={currentUrl}
+                    size={180}
+                    level="M"
+                    fgColor="#16201a"
+                    bgColor="#ffffff"
+                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                  />
+                </div>
               ) : (
-                <div className="w-[200px] h-[200px] flex items-center justify-center">
+                <div className="w-[180px] h-[180px] flex items-center justify-center">
                   <Loader2 className="w-8 h-8 animate-spin text-stone-400" />
                 </div>
               )}
@@ -1302,7 +1269,7 @@ export default function PhotoParty() {
         </div>
       )}
 
-      {/* Lightbox z obsługą Swipe, Zoom i bezpośredniego zapisu */}
+      {/* Lightbox */}
       {selectedPhoto && selectedIndex !== null && (
         <div
           className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-2 sm:p-4 select-none overflow-hidden"
