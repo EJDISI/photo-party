@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Image from "next/image";
 import QRCode from "react-qr-code";
 import { 
   Camera, 
@@ -59,7 +60,7 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
   }
 
   return new Promise((resolve) => {
-    const img = new Image();
+    const img = new window.Image();
     const tempUrl = URL.createObjectURL(item.file);
     img.src = tempUrl;
 
@@ -331,7 +332,6 @@ export default function PhotoParty() {
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  // Domyślnie 12 kafelków
   const INITIAL_VISIBLE_COUNT = 12;
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
@@ -969,42 +969,42 @@ export default function PhotoParty() {
                   )}
 
                   {!isUploading && item.status === "idle" && (
-                        <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
-                          {!item.file.type.startsWith("video/") ? (
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => toggleFlip(item.id)}
-                                title="Odbij lustrzanie"
-                                className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
-                                  item.isFlipped 
-                                    ? "bg-amber-400 text-stone-950 font-bold scale-105" 
-                                    : "bg-black/75 hover:bg-black text-white"
-                                }`}
-                              >
-                                <FlipHorizontal className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => rotatePhoto(item.id)}
-                                title="Obróć o 90°"
-                                className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
-                              >
-                                <RotateCw className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : <div />}
+                    <div className="absolute top-2 inset-x-2 flex justify-between items-center z-10">
+                      {!item.file.type.startsWith("video/") ? (
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleFlip(item.id)}
+                            title="Odbij lustrzanie"
+                            className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
+                              item.isFlipped 
+                                ? "bg-amber-400 text-stone-950 font-bold scale-105" 
+                                : "bg-black/75 hover:bg-black text-white"
+                            }`}
+                          >
+                            <FlipHorizontal className="w-3.5 h-3.5" />
+                          </button>
 
                           <button
                             type="button"
-                            onClick={() => removeFile(item.id)}
-                            title="Usuń"
-                            className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
+                            onClick={() => rotatePhoto(item.id)}
+                            title="Obróć o 90°"
+                            className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
                           >
-                            <X className="w-3.5 h-3.5 stroke-[3]" />
+                            <RotateCw className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      ) : <div />}
+
+                      <button
+                        type="button"
+                        onClick={() => removeFile(item.id)}
+                        title="Usuń"
+                        className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
+                      >
+                        <X className="w-3.5 h-3.5 stroke-[3]" />
+                      </button>
+                    </div>
                   )}
 
                   {item.isFlipped && (
@@ -1139,13 +1139,13 @@ export default function PhotoParty() {
                           </div>
                         </>
                       ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <Image
                           src={photo.url}
                           alt={`Zdjęcie od ${photo.author}`}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover transition duration-200 group-hover:scale-105"
+                          fill
+                          sizes="(max-width: 640px) 33vw, 150px"
+                          priority={index < 6}
+                          className="object-cover transition duration-200 group-hover:scale-105"
                         />
                       )}
 
