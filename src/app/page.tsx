@@ -1144,7 +1144,8 @@ export default function PhotoParty() {
                           alt={`Zdjęcie od ${photo.author}`}
                           fill
                           sizes="(max-width: 640px) 33vw, 150px"
-                          priority={index < 6}
+                          priority={index < 3}
+                          unoptimized
                           className="object-cover transition duration-200 group-hover:scale-105"
                         />
                       )}
@@ -1191,7 +1192,7 @@ export default function PhotoParty() {
                 })}
               </div>
 
-              {/* Przyciski: Rozwiń (Pokaż więcej) / Zwiń */}
+              {/* Przyciski: Rozwiń / Zwiń */}
               <div className="flex flex-col gap-2 mt-3">
                 {visibleCount < gallery.length && (
                   <button

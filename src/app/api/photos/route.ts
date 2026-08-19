@@ -97,7 +97,14 @@ export async function GET() {
     ]);
 
     if (!listRes.Contents || listRes.Contents.length === 0) {
-      return NextResponse.json({ photos: [] });
+      return NextResponse.json(
+        { photos: [] },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=10, stale-while-revalidate=59",
+          },
+        }
+      );
     }
 
     const photos = listRes.Contents
@@ -138,7 +145,14 @@ export async function GET() {
       (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
     );
 
-    return NextResponse.json({ photos });
+    return NextResponse.json(
+      { photos },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=59",
+        },
+      }
+    );
   } catch (error) {
     console.error("Błąd pobierania zdjęć z R2:", error);
     return NextResponse.json({ error: "Błąd pobierania zdjęć" }, { status: 500 });
