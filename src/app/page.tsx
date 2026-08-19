@@ -734,7 +734,7 @@ export default function PhotoParty() {
   const selectedPhoto = selectedIndex !== null ? gallery[selectedIndex] : null;
 
   return (
-    <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200 transition-colors duration-200">
+    <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8] pb-20 selection:bg-emerald-200">
       {/* Lekkie powiadomienie sukcesu */}
       <div 
         className={`fixed top-4 inset-x-4 z-50 max-w-sm mx-auto transition-all duration-300 pointer-events-none ${
@@ -750,7 +750,7 @@ export default function PhotoParty() {
       </div>
 
       {/* Pasek nawigacyjny */}
-      <header className="bg-white dark:bg-[#141d18] border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center relative transition-colors duration-200 shadow-sm">
+      <header className="bg-white dark:bg-[#141d18] border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center relative shadow-sm">
         <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-1">
           <span>Wesele</span>
           <Heart className="w-4 h-4 fill-rose-400 text-rose-400" />
@@ -1123,8 +1123,8 @@ export default function PhotoParty() {
                           alt={`Zdjęcie od ${photo.author}`}
                           fill
                           sizes="(max-width: 640px) 33vw, 150px"
+                          quality={65}
                           priority={index < 3}
-                          unoptimized
                           className="object-cover transition duration-200 group-hover:scale-105"
                         />
                       )}

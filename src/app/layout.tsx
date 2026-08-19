@@ -34,12 +34,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const r2Domain = process.env.NEXT_PUBLIC_R2_DOMAIN || process.env.R2_PUBLIC_DOMAIN || "";
+  const r2Domain = (process.env.NEXT_PUBLIC_R2_DOMAIN || process.env.R2_PUBLIC_DOMAIN || "").trim();
+  const isValidUrl = r2Domain.startsWith("http://") || r2Domain.startsWith("https://");
 
   return (
     <html lang="pl" suppressHydrationWarning>
       <head>
-        {r2Domain && (
+        {isValidUrl && (
           <>
             <link rel="preconnect" href={r2Domain} crossOrigin="anonymous" />
             <link rel="dns-prefetch" href={r2Domain} />
