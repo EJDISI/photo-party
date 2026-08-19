@@ -34,8 +34,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const r2Domain = process.env.NEXT_PUBLIC_R2_DOMAIN || process.env.R2_PUBLIC_DOMAIN || "";
+
   return (
     <html lang="pl" suppressHydrationWarning>
+      <head>
+        {r2Domain && (
+          <>
+            <link rel="preconnect" href={r2Domain} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={r2Domain} />
+          </>
+        )}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#faf8f5] dark:bg-[#0f1612] text-[#2c3e35] dark:text-[#e6ede8]`}
       >

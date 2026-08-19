@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Image from "next/image";
-import QRCode from "react-qr-code";
+import dynamic from "next/dynamic";
 import { 
   Camera, 
-  Video,
+  Video, 
   Image as ImageIcon, 
   UploadCloud, 
   CheckCircle2, 
@@ -32,6 +32,12 @@ import {
   ChevronDown,
   ChevronUp
 } from "lucide-react";
+
+// Leniwe asynchroniczne ładowanie komponentu QR
+const QRCode = dynamic(() => import("react-qr-code"), {
+  ssr: false,
+  loading: () => <Loader2 className="w-8 h-8 animate-spin text-stone-400" />,
+});
 
 interface FileItem {
   id: string;
@@ -307,7 +313,6 @@ function ZoomableImage({
 }
 
 export default function PhotoParty() {
-  const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [author, setAuthor] = useState("");
@@ -351,8 +356,6 @@ export default function PhotoParty() {
   }, []);
 
   useEffect(() => {
-    setMounted(true);
-
     const savedTheme = localStorage.getItem("photo_party_theme");
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const shouldBeDark = savedTheme === "dark" || (!savedTheme && systemPrefersDark);
@@ -726,14 +729,6 @@ export default function PhotoParty() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedIndex, showNextPhoto, showPrevPhoto]);
-
-  if (!mounted) {
-    return (
-      <main className="min-h-screen bg-[#faf8f5] dark:bg-[#0f1612] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-800 dark:text-emerald-500 animate-spin" />
-      </main>
-    );
-  }
 
   const completedCount = files.filter((f) => f.status === "success").length;
   const isAuthorValid = author.trim().length > 0;
