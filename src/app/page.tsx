@@ -33,7 +33,6 @@ import {
   ChevronUp
 } from "lucide-react";
 
-// Leniwe asynchroniczne ładowanie komponentu QR
 const QRCode = dynamic(() => import("react-qr-code"), {
   ssr: false,
   loading: () => <Loader2 className="w-8 h-8 animate-spin text-stone-400" />,
