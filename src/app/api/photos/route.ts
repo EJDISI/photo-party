@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { 
   S3Client, 
   ListObjectsV2Command, 
-  DeleteObjectCommand 
+  DeleteObjectCommand,
+  GetObjectCommand 
 } from "@aws-sdk/client-s3";
 
 function getR2Client() {
@@ -63,6 +64,23 @@ function getPublicDomain() {
   return domain.replace(/\/$/, "");
 }
 
+const LIKES_FILE_KEY = "metadata/likes.json";
+
+async function getLikesMap(s3: S3Client, bucket: string): Promise<Record<string, number>> {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucket,
+      Key: LIKES_FILE_KEY,
+    });
+    const res = await s3.send(command);
+    if (!res.Body) return {};
+    const text = await res.Body.transformToString();
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
 export async function GET() {
   try {
     const s3 = getR2Client();
@@ -73,47 +91,48 @@ export async function GET() {
       return NextResponse.json({ error: "Błąd konfiguracji R2" }, { status: 500 });
     }
 
-    const command = new ListObjectsV2Command({
-      Bucket: bucket,
-    });
+    const [listRes, likesMap] = await Promise.all([
+      s3.send(new ListObjectsV2Command({ Bucket: bucket })),
+      getLikesMap(s3, bucket),
+    ]);
 
-    const data = await s3.send(command);
-
-    if (!data.Contents || data.Contents.length === 0) {
+    if (!listRes.Contents || listRes.Contents.length === 0) {
       return NextResponse.json({ photos: [] });
     }
 
-    const photos = data.Contents.map((item) => {
-      const key = item.Key || "";
-      let author = "Gość";
+    const photos = listRes.Contents
+      .filter((item) => item.Key && !item.Key.startsWith("metadata/"))
+      .map((item) => {
+        const key = item.Key || "";
+        let author = "Gość";
 
-      // Odczytujemy autora z nazwy pliku (__AUTOR__wartość__)
-      if (key.includes("__AUTOR__")) {
-        try {
-          const parts = key.split("__AUTOR__");
-          if (parts[1]) {
-            const rawAuthor = parts[1].split("__")[0];
-            author = decodeURIComponent(rawAuthor);
+        if (key.includes("__AUTOR__")) {
+          try {
+            const parts = key.split("__AUTOR__");
+            if (parts[1]) {
+              const rawAuthor = parts[1].split("__")[0];
+              author = decodeURIComponent(rawAuthor);
+            }
+          } catch {
+            author = "Gość";
           }
-        } catch {
-          author = "Gość";
         }
-      }
 
-      const isVideo = !!(
-        key.endsWith(".mp4") || 
-        key.endsWith(".webm") || 
-        key.endsWith(".mov")
-      );
+        const isVideo = !!(
+          key.endsWith(".mp4") || 
+          key.endsWith(".webm") || 
+          key.endsWith(".mov")
+        );
 
-      return {
-        key,
-        url: publicDomain ? `${publicDomain}/${key}` : `/${key}`,
-        author,
-        uploadedAt: item.LastModified?.toISOString() || new Date().toISOString(),
-        isVideo,
-      };
-    });
+        return {
+          key,
+          url: publicDomain ? `${publicDomain}/${key}` : `/${key}`,
+          author,
+          uploadedAt: item.LastModified?.toISOString() || new Date().toISOString(),
+          isVideo,
+          likes: likesMap[key] || 0,
+        };
+      });
 
     photos.sort(
       (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { 
   Camera, 
   Video,
@@ -26,7 +26,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  Download
+  Download,
+  Crown
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -48,10 +49,12 @@ interface GalleryPhoto {
   author: string;
   uploadedAt: string;
   isVideo: boolean;
+  likes: number;
 }
 
+// Funkcja przetwarzająca i kompresująca zdjęcia do max 2560px przy zachowaniu ostrości
 const applyTransformations = async (item: FileItem): Promise<File> => {
-  if (item.file.type.startsWith("video/") || (!item.isFlipped && item.rotation === 0)) {
+  if (item.file.type.startsWith("video/")) {
     return item.file;
   }
 
@@ -67,9 +70,27 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
 
       if (!ctx) return resolve(item.file);
 
+      // Skalowanie do maksymalnie 2560px na dłuższym boku (Quad HD / 2K)
+      const MAX_DIMENSION = 2560;
+      let targetWidth = img.naturalWidth;
+      let targetHeight = img.naturalHeight;
+
+      if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
+        if (targetWidth > targetHeight) {
+          targetHeight = Math.round((targetHeight * MAX_DIMENSION) / targetWidth);
+          targetWidth = MAX_DIMENSION;
+        } else {
+          targetWidth = Math.round((targetWidth * MAX_DIMENSION) / targetHeight);
+          targetHeight = MAX_DIMENSION;
+        }
+      }
+
       const isRotated90or270 = item.rotation === 90 || item.rotation === 270;
-      canvas.width = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
-      canvas.height = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
+      canvas.width = isRotated90or270 ? targetHeight : targetWidth;
+      canvas.height = isRotated90or270 ? targetWidth : targetHeight;
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -81,24 +102,25 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
 
       ctx.drawImage(
         img,
-        -img.naturalWidth / 2,
-        -img.naturalHeight / 2,
-        img.naturalWidth,
-        img.naturalHeight
+        -targetWidth / 2,
+        -targetHeight / 2,
+        targetWidth,
+        targetHeight
       );
       ctx.restore();
 
+      // Kompresja do JPEG 90% (redukcja 8-15 MB do ~800 KB bez widocznej straty jakości)
       canvas.toBlob(
         (blob) => {
           if (!blob) return resolve(item.file);
-          const bakedFile = new File([blob], item.name, {
+          const bakedFile = new File([blob], item.name.replace(/\.[^/.]+$/, ".jpg"), {
             type: "image/jpeg",
             lastModified: Date.now(),
           });
           resolve(bakedFile);
         },
         "image/jpeg",
-        0.95
+        0.90
       );
     };
 
@@ -295,6 +317,7 @@ export default function PhotoParty() {
   const [isComplete, setIsComplete] = useState(false);
 
   const [myUploadedKeys, setMyUploadedKeys] = useState<string[]>([]);
+  const [myLikedKeys, setMyLikedKeys] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -304,7 +327,7 @@ export default function PhotoParty() {
 
   const authorInputRef = useRef<HTMLInputElement>(null);
 
-  const [gallery, setGallery] = useState<GalleryPhoto[]>([]);
+  const [rawGallery, setRawGallery] = useState<GalleryPhoto[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -314,7 +337,7 @@ export default function PhotoParty() {
       const res = await fetch("/api/photos");
       if (res.ok) {
         const data = await res.json();
-        setGallery(data.photos || []);
+        setRawGallery(data.photos || []);
       }
     } catch (err) {
       console.error("Błąd galerii:", err);
@@ -340,10 +363,18 @@ export default function PhotoParty() {
 
     if (typeof window !== "undefined") {
       setCurrentUrl(window.location.origin);
+      
       const savedKeys = localStorage.getItem("photo_party_my_keys");
       if (savedKeys) {
         try {
           setMyUploadedKeys(JSON.parse(savedKeys));
+        } catch {}
+      }
+
+      const savedLikes = localStorage.getItem("photo_party_my_liked_keys");
+      if (savedLikes) {
+        try {
+          setMyLikedKeys(JSON.parse(savedLikes));
         } catch {}
       }
     }
@@ -351,6 +382,21 @@ export default function PhotoParty() {
     const saved = localStorage.getItem("photo_party_author");
     if (saved) setAuthor(saved);
   }, [fetchGallery]);
+
+  // Logika sortowania: TOP 3 wg liczby like'ów (jeśli > 0), a reszta od najnowszych
+  const gallery = useMemo(() => {
+    if (rawGallery.length === 0) return [];
+
+    const sortedByLikes = [...rawGallery].sort((a, b) => b.likes - a.likes);
+    const top3 = sortedByLikes.slice(0, 3);
+    const top3Keys = new Set(top3.map((p) => p.key));
+
+    const rest = rawGallery
+      .filter((p) => !top3Keys.has(p.key))
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+    return [...top3, ...rest];
+  }, [rawGallery]);
 
   const toggleDarkMode = () => {
     const nextState = !isDark;
@@ -437,7 +483,50 @@ export default function PhotoParty() {
     }
   };
 
-  // Obsługa zapisu prosto do Rolki zdjęć iPhone / Galerii Android lub pobierania na PC
+  // Obsługa polubień z wystrzałem konfetti po wskoczeniu na 1. miejsce TOP
+  const handleToggleLike = async (key: string) => {
+    const isLiked = myLikedKeys.includes(key);
+    const action = isLiked ? "unlike" : "like";
+
+    const currentTop1Key = rawGallery.length > 0 
+      ? [...rawGallery].sort((a, b) => b.likes - a.likes)[0]?.key 
+      : null;
+
+    const newRawGallery = rawGallery.map((p) => {
+      if (p.key === key) {
+        return { ...p, likes: Math.max(0, p.likes + (isLiked ? -1 : 1)) };
+      }
+      return p;
+    });
+
+    setRawGallery(newRawGallery);
+
+    const updatedLikes = isLiked ? myLikedKeys.filter((k) => k !== key) : [...myLikedKeys, key];
+    setMyLikedKeys(updatedLikes);
+    localStorage.setItem("photo_party_my_liked_keys", JSON.stringify(updatedLikes));
+
+    if (!isLiked) {
+      const newTop1 = [...newRawGallery].sort((a, b) => b.likes - a.likes)[0];
+      if (newTop1 && newTop1.key === key && newTop1.likes > 0 && currentTop1Key !== key) {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      }
+    }
+
+    try {
+      await fetch("/api/photos/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, action }),
+      });
+    } catch (err) {
+      console.error("Błąd wysyłania polubienia:", err);
+    }
+  };
+
   const handleDownload = async (photo: GalleryPhoto) => {
     const extension = photo.isVideo ? "mp4" : "jpg";
     const mimeType = photo.isVideo ? "video/mp4" : "image/jpeg";
@@ -447,7 +536,6 @@ export default function PhotoParty() {
     try {
       setIsDownloading(true);
 
-      // Pobieramy plik przez nasze wewnętrzne proxy
       const downloadEndpoint = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
       const response = await fetch(downloadEndpoint);
       if (!response.ok) throw new Error("Błąd pobierania pliku");
@@ -455,7 +543,6 @@ export default function PhotoParty() {
       const blob = await response.blob();
       const file = new File([blob], filename, { type: mimeType });
 
-      // Sprawdzamy czy telefon wspiera natywne udostępnianie plików do Galerii
       if (
         typeof navigator !== "undefined" &&
         navigator.canShare &&
@@ -466,7 +553,6 @@ export default function PhotoParty() {
           title: "Zdjęcie z wesela Kinga i Kamil",
         });
       } else {
-        // Standardowe pobieranie dla komputerów / przeglądarek bez navigator.share
         const blobUrl = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = blobUrl;
@@ -477,10 +563,8 @@ export default function PhotoParty() {
         window.URL.revokeObjectURL(blobUrl);
       }
     } catch (error: unknown) {
-      // Jeśli użytkownik po prostu anulował systemowe okienko udostępniania, nie robimy błędu
       if ((error as { name?: string })?.name !== "AbortError") {
         console.error("Błąd podczas zapisu:", error);
-        // Ostateczny fallback – bezpośrednie przejście do linku download
         const fallbackUrl = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
         window.location.href = fallbackUrl;
       }
@@ -601,7 +685,7 @@ export default function PhotoParty() {
       });
 
       if (res.ok) {
-        setGallery((prev) => prev.filter((p) => p.key !== key));
+        setRawGallery((prev) => prev.filter((p) => p.key !== key));
         const updatedKeys = myUploadedKeys.filter((k) => k !== key);
         setMyUploadedKeys(updatedKeys);
         localStorage.setItem("photo_party_my_keys", JSON.stringify(updatedKeys));
@@ -1010,7 +1094,7 @@ export default function PhotoParty() {
           </>
         )}
 
-        {/* Wspólna Galeria */}
+        {/* Wspólna Galeria z TOP 3 i polubieniami */}
         <section className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1042,14 +1126,28 @@ export default function PhotoParty() {
             <div className="grid grid-cols-3 gap-2">
               {gallery.map((photo, index) => {
                 const isMine = myUploadedKeys.includes(photo.key);
+                const isLiked = myLikedKeys.includes(photo.key);
+                const isTop3 = index < 3 && photo.likes > 0;
                 const videoSource = photo.isVideo ? `${photo.url}#t=0.001` : photo.url;
 
                 return (
                   <div
                     key={photo.key}
                     onClick={() => setSelectedIndex(index)}
-                    className="relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border border-stone-200 dark:border-stone-800 cursor-pointer shadow-sm active:scale-95 transition select-none"
+                    className={`relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border cursor-pointer shadow-sm active:scale-95 transition select-none ${
+                      isTop3 
+                        ? "border-amber-400/80 ring-1 ring-amber-400/40" 
+                        : "border-stone-200 dark:border-stone-800"
+                    }`}
                   >
+                    {/* Odznaka TOP 1 / 2 / 3 */}
+                    {isTop3 && (
+                      <div className="absolute top-1.5 left-1.5 z-10 bg-amber-400 text-stone-950 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold flex items-center gap-0.5 shadow-md uppercase tracking-wider">
+                        <Crown className="w-3 h-3 fill-stone-950" />
+                        <span>TOP {index + 1}</span>
+                      </div>
+                    )}
+
                     {photo.isVideo ? (
                       <>
                         <video 
@@ -1091,17 +1189,29 @@ export default function PhotoParty() {
                       </button>
                     )}
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-1.5 opacity-90 group-hover:opacity-100 pointer-events-none">
-                      <span className="text-[10px] text-white font-medium truncate">
+                    {/* Pasek dolny: Podpis + Licznik polubień */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-1.5 opacity-90 group-hover:opacity-100">
+                      <span className="text-[10px] text-white font-medium truncate max-w-[60%]">
                         {photo.author}
                       </span>
-                    </div>
 
-                    {!isMine && (
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition p-1 bg-black/40 rounded-md text-white">
-                        <Maximize2 className="w-3 h-3" />
-                      </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleLike(photo.key);
+                        }}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full backdrop-blur-md text-[10px] font-bold transition active:scale-125 cursor-pointer ${
+                          isLiked 
+                            ? "bg-rose-500 text-white" 
+                            : "bg-black/50 text-white hover:bg-black/75"
+                        }`}
+                        title="Polub to zdjęcie"
+                      >
+                        <Heart className={`w-3 h-3 ${isLiked ? "fill-white text-white" : "text-rose-400"}`} />
+                        <span>{photo.likes || 0}</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1176,7 +1286,7 @@ export default function PhotoParty() {
         </div>
       )}
 
-      {/* Lightbox / Odtwarzacz z Pinch-to-Zoom i pobieraniem */}
+      {/* Lightbox / Odtwarzacz z Pinch-to-Zoom, Polubieniem i Pobieraniem */}
       {selectedPhoto && selectedIndex !== null && (
         <div
           className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 select-none overflow-hidden"
@@ -1184,12 +1294,31 @@ export default function PhotoParty() {
         >
           {/* Górny pasek nawigacyjny lightboxa */}
           <div className="absolute top-4 inset-x-4 flex justify-between items-center z-30 pointer-events-none">
-            <div className="text-xs font-bold tracking-wider text-stone-400 px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-full border border-white/10 pointer-events-auto">
-              {selectedIndex + 1} / {gallery.length}
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <div className="text-xs font-bold tracking-wider text-stone-400 px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-full border border-white/10">
+                {selectedIndex + 1} / {gallery.length}
+              </div>
+
+              {/* Przycisk polubienia w lightboxie */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleLike(selectedPhoto.key);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition active:scale-125 cursor-pointer backdrop-blur-md border border-white/10 ${
+                  myLikedKeys.includes(selectedPhoto.key)
+                    ? "bg-rose-500 text-white"
+                    : "bg-black/50 text-white hover:bg-black/75"
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${myLikedKeys.includes(selectedPhoto.key) ? "fill-white text-white" : "text-rose-400"}`} />
+                <span>{selectedPhoto.likes || 0}</span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2 pointer-events-auto">
-              {/* Przycisk Pobierz / Zapisz do Galerii */}
+              {/* Przycisk Pobierz */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -1210,7 +1339,7 @@ export default function PhotoParty() {
                 )}
               </button>
 
-              {/* Przycisk Usuń (jeśli moje) */}
+              {/* Przycisk Usuń */}
               {myUploadedKeys.includes(selectedPhoto.key) && (
                 <button
                   type="button"
@@ -1272,7 +1401,7 @@ export default function PhotoParty() {
             </button>
           )}
 
-          {/* Obszar zawartości (Zdjęcie z pinch-to-zoom / Wideo) */}
+          {/* Obszar zawartości */}
           <div 
             className="w-full h-full max-h-[85vh] flex flex-col items-center justify-center relative z-10 px-2"
             onClick={(e) => e.stopPropagation()}
