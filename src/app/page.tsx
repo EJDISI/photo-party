@@ -59,7 +59,6 @@ interface GalleryPhoto {
   likes: number;
 }
 
-// Lekki komponent generujący miniaturę klatki z wideo dla iOS/Android bez zamrażania sieci
 function VideoThumbnail({ src }: { src: string }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
@@ -84,9 +83,7 @@ function VideoThumbnail({ src }: { src: string }) {
           const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
           setThumbUrl(dataUrl);
         }
-      } catch {
-        // Ignorujemy błędy CORS jeśli wystąpią
-      }
+      } catch {}
     };
 
     video.addEventListener("loadeddata", captureFrame, { once: true });
@@ -582,20 +579,17 @@ export default function PhotoParty() {
 
   const handleDownload = async (photo: GalleryPhoto) => {
     const extension = photo.isVideo ? "mp4" : "jpg";
-    const mimeType = photo.isVideo ? "video/mp4" : "image/jpeg";
     const cleanAuthor = photo.author.replace(/[^a-zA-Z0-9]/g, "_") || "Gosc";
     const filename = `Wesele_Kinga_i_Kamil_${cleanAuthor}_${Date.now()}.${extension}`;
 
     try {
       setIsDownloading(true);
 
-      const downloadEndpoint = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
-      const response = await fetch(downloadEndpoint);
+      const response = await fetch(photo.url);
       if (!response.ok) throw new Error("Błąd pobierania pliku");
-      
       const blob = await response.blob();
-      const file = new File([blob], filename, { type: mimeType });
 
+      const file = new File([blob], filename, { type: blob.type });
       if (
         typeof navigator !== "undefined" &&
         navigator.canShare &&
@@ -605,22 +599,25 @@ export default function PhotoParty() {
           files: [file],
           title: "Zdjęcie z wesela Kinga i Kamil",
         });
-      } else {
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
+        return;
       }
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+
     } catch (error: unknown) {
-      if ((error as { name?: string })?.name !== "AbortError") {
-        console.error("Błąd podczas zapisu:", error);
-        const fallbackUrl = `/api/download?url=${encodeURIComponent(photo.url)}&filename=${encodeURIComponent(filename)}`;
-        window.location.href = fallbackUrl;
-      }
+      console.error("Błąd podczas zapisu:", error);
+      const link = document.createElement("a");
+      link.href = photo.url;
+      link.target = "_blank";
+      link.download = filename;
+      link.click();
     } finally {
       setIsDownloading(false);
     }
