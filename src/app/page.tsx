@@ -27,7 +27,8 @@ import {
   ChevronRight,
   RotateCcw,
   Download,
-  Crown
+  Crown,
+  ChevronDown
 } from "lucide-react";
 import confetti from "canvas-confetti";
 
@@ -70,7 +71,6 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
 
       if (!ctx) return resolve(item.file);
 
-      // Skalowanie do maksymalnie 2560px na dłuższym boku (Quad HD / 2K)
       const MAX_DIMENSION = 2560;
       let targetWidth = img.naturalWidth;
       let targetHeight = img.naturalHeight;
@@ -109,7 +109,6 @@ const applyTransformations = async (item: FileItem): Promise<File> => {
       );
       ctx.restore();
 
-      // Kompresja do JPEG 90% (redukcja 8-15 MB do ~800 KB bez widocznej straty jakości)
       canvas.toBlob(
         (blob) => {
           if (!blob) return resolve(item.file);
@@ -297,7 +296,7 @@ function ZoomableImage({
             e.stopPropagation();
             handleResetZoom();
           }}
-          className="absolute bottom-12 px-3 py-1.5 bg-black/75 hover:bg-black text-amber-300 text-xs font-semibold rounded-full backdrop-blur-md border border-white/10 flex items-center gap-1.5 shadow-lg z-30 cursor-pointer"
+          className="absolute bottom-12 px-3 py-1.5 bg-black/90 text-amber-300 text-xs font-semibold rounded-full border border-white/15 flex items-center gap-1.5 shadow-lg z-30 cursor-pointer"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Resetuj powiększenie ({scale.toFixed(1)}x)</span>
@@ -330,6 +329,9 @@ export default function PhotoParty() {
   const [rawGallery, setRawGallery] = useState<GalleryPhoto[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // Paginacja galerii w celu ochrony RAM-u starszych telefonów
+  const [visibleCount, setVisibleCount] = useState(18);
 
   const fetchGallery = useCallback(async () => {
     try {
@@ -383,7 +385,6 @@ export default function PhotoParty() {
     if (saved) setAuthor(saved);
   }, [fetchGallery]);
 
-  // Logika sortowania: TOP 3 wg liczby like'ów (jeśli > 0), a reszta od najnowszych
   const gallery = useMemo(() => {
     if (rawGallery.length === 0) return [];
 
@@ -397,6 +398,10 @@ export default function PhotoParty() {
 
     return [...top3, ...rest];
   }, [rawGallery]);
+
+  const visibleGallery = useMemo(() => {
+    return gallery.slice(0, visibleCount);
+  }, [gallery, visibleCount]);
 
   const toggleDarkMode = () => {
     const nextState = !isDark;
@@ -483,7 +488,6 @@ export default function PhotoParty() {
     }
   };
 
-  // Obsługa polubień z wystrzałem konfetti po wskoczeniu na 1. miejsce TOP
   const handleToggleLike = async (key: string) => {
     const isLiked = myLikedKeys.includes(key);
     const action = isLiked ? "unlike" : "like";
@@ -969,7 +973,7 @@ export default function PhotoParty() {
                             className="absolute inset-0 w-full h-full object-cover" 
                           />
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="p-2 bg-black/60 rounded-full text-white backdrop-blur-xs">
+                            <div className="p-2 bg-black/60 rounded-full text-white">
                               <Play className="w-5 h-5 fill-white" />
                             </div>
                           </div>
@@ -999,7 +1003,7 @@ export default function PhotoParty() {
                                 type="button"
                                 onClick={() => toggleFlip(item.id)}
                                 title="Odbij lustrzanie"
-                                className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md backdrop-blur-sm flex items-center justify-center ${
+                                className={`p-2 rounded-full transition-transform active:scale-90 cursor-pointer shadow-md flex items-center justify-center ${
                                   item.isFlipped 
                                     ? "bg-amber-400 text-stone-950 font-bold scale-105" 
                                     : "bg-black/75 hover:bg-black text-white"
@@ -1012,7 +1016,7 @@ export default function PhotoParty() {
                                 type="button"
                                 onClick={() => rotatePhoto(item.id)}
                                 title="Obróć o 90°"
-                                className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md backdrop-blur-sm flex items-center justify-center"
+                                className="p-2 rounded-full bg-black/75 hover:bg-black active:scale-90 text-white transition-transform cursor-pointer shadow-md flex items-center justify-center"
                               >
                                 <RotateCw className="w-3.5 h-3.5" />
                               </button>
@@ -1023,7 +1027,7 @@ export default function PhotoParty() {
                             type="button"
                             onClick={() => removeFile(item.id)}
                             title="Usuń"
-                            className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md backdrop-blur-sm flex items-center justify-center"
+                            className="p-2 rounded-full bg-rose-600/90 hover:bg-rose-700 active:scale-90 text-white transition-transform cursor-pointer ml-auto shadow-md flex items-center justify-center"
                           >
                             <X className="w-3.5 h-3.5 stroke-[3]" />
                           </button>
@@ -1037,7 +1041,7 @@ export default function PhotoParty() {
                       )}
 
                       {item.status === "uploading" && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-3 text-white z-10">
+                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-3 text-white z-10">
                           <Loader2 className="w-7 h-7 text-amber-300 animate-spin mb-1" />
                           <span className="text-xs font-bold tracking-wider">Wgrywanie...</span>
                           <span className="text-[11px] text-amber-200 font-semibold">{item.progress}%</span>
@@ -1048,14 +1052,14 @@ export default function PhotoParty() {
                       )}
 
                       {item.status === "success" && (
-                        <div className="absolute inset-0 bg-emerald-950/80 flex flex-col items-center justify-center p-2 text-white z-10">
+                        <div className="absolute inset-0 bg-emerald-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
                           <CheckCircle2 className="w-9 h-9 text-emerald-400 mb-1" />
                           <span className="text-xs font-bold text-emerald-200">Wgrano! ✅</span>
                         </div>
                       )}
 
                       {item.status === "error" && (
-                        <div className="absolute inset-0 bg-rose-950/80 flex flex-col items-center justify-center p-2 text-white z-10">
+                        <div className="absolute inset-0 bg-rose-950/90 flex flex-col items-center justify-center p-2 text-white z-10">
                           <AlertCircle className="w-8 h-8 text-rose-400 mb-1" />
                           <span className="text-[11px] font-bold text-rose-200 text-center">Błąd</span>
                         </div>
@@ -1094,7 +1098,7 @@ export default function PhotoParty() {
           </>
         )}
 
-        {/* Wspólna Galeria z TOP 3 i polubieniami */}
+        {/* Wspólna Galeria z optymalizacją ilości elementów DOM */}
         <section className="bg-white dark:bg-[#16201a] p-5 rounded-2xl border border-[#e8e2d8] dark:border-[#22332a] shadow-sm space-y-4 pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1123,99 +1127,111 @@ export default function PhotoParty() {
               Bądź pierwszą osobą, która doda zdjęcie lub film do albumu! 📸
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {gallery.map((photo, index) => {
-                const isMine = myUploadedKeys.includes(photo.key);
-                const isLiked = myLikedKeys.includes(photo.key);
-                const isTop3 = index < 3 && photo.likes > 0;
-                const videoSource = photo.isVideo ? `${photo.url}#t=0.001` : photo.url;
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {visibleGallery.map((photo, index) => {
+                  const isMine = myUploadedKeys.includes(photo.key);
+                  const isLiked = myLikedKeys.includes(photo.key);
+                  const isTop3 = index < 3 && photo.likes > 0;
+                  const videoSource = photo.isVideo ? `${photo.url}#t=0.001` : photo.url;
 
-                return (
-                  <div
-                    key={photo.key}
-                    onClick={() => setSelectedIndex(index)}
-                    className={`relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border cursor-pointer shadow-sm active:scale-95 transition select-none ${
-                      isTop3 
-                        ? "border-amber-400/80 ring-1 ring-amber-400/40" 
-                        : "border-stone-200 dark:border-stone-800"
-                    }`}
-                  >
-                    {/* Odznaka TOP 1 / 2 / 3 */}
-                    {isTop3 && (
-                      <div className="absolute top-1.5 left-1.5 z-10 bg-amber-400 text-stone-950 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold flex items-center gap-0.5 shadow-md uppercase tracking-wider">
-                        <Crown className="w-3 h-3 fill-stone-950" />
-                        <span>TOP {index + 1}</span>
-                      </div>
-                    )}
-
-                    {photo.isVideo ? (
-                      <>
-                        <video 
-                          src={videoSource}
-                          preload="metadata"
-                          playsInline
-                          muted
-                          className="w-full h-full object-cover pointer-events-none" 
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="p-2 bg-black/60 rounded-full text-white backdrop-blur-xs group-hover:scale-110 transition">
-                            <Play className="w-4 h-4 fill-white" />
-                          </div>
+                  return (
+                    <div
+                      key={photo.key}
+                      onClick={() => setSelectedIndex(index)}
+                      className={`relative group aspect-square rounded-xl overflow-hidden bg-stone-900 border cursor-pointer shadow-sm active:scale-95 transition select-none ${
+                        isTop3 
+                          ? "border-amber-400/80 ring-1 ring-amber-400/40" 
+                          : "border-stone-200 dark:border-stone-800"
+                      }`}
+                    >
+                      {isTop3 && (
+                        <div className="absolute top-1.5 left-1.5 z-10 bg-amber-400 text-stone-950 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold flex items-center gap-0.5 shadow-md uppercase tracking-wider">
+                          <Crown className="w-3 h-3 fill-stone-950" />
+                          <span>TOP {index + 1}</span>
                         </div>
-                      </>
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={photo.url}
-                        alt={`Zdjęcie od ${photo.author}`}
-                        loading="lazy"
-                        className="w-full h-full object-cover transition duration-200 group-hover:scale-105"
-                      />
-                    )}
+                      )}
 
-                    {/* Przycisk usuwania na kafelku */}
-                    {isMine && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeletePhoto(photo.key);
-                        }}
-                        disabled={isDeleting}
-                        title="Usuń ten plik"
-                        className="absolute top-1 right-1 z-10 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg transition shadow-md cursor-pointer flex items-center justify-center"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                      {photo.isVideo ? (
+                        <>
+                          <video 
+                            src={videoSource}
+                            preload="none"
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover pointer-events-none" 
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="p-2 bg-black/60 rounded-full text-white group-hover:scale-110 transition">
+                              <Play className="w-4 h-4 fill-white" />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photo.url}
+                          alt={`Zdjęcie od ${photo.author}`}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover transition duration-200 group-hover:scale-105"
+                        />
+                      )}
 
-                    {/* Pasek dolny: Podpis + Licznik polubień */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-1.5 opacity-90 group-hover:opacity-100">
-                      <span className="text-[10px] text-white font-medium truncate max-w-[60%]">
-                        {photo.author}
-                      </span>
+                      {isMine && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePhoto(photo.key);
+                          }}
+                          disabled={isDeleting}
+                          title="Usuń ten plik"
+                          className="absolute top-1 right-1 z-10 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg transition shadow-md cursor-pointer flex items-center justify-center"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleLike(photo.key);
-                        }}
-                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full backdrop-blur-md text-[10px] font-bold transition active:scale-125 cursor-pointer ${
-                          isLiked 
-                            ? "bg-rose-500 text-white" 
-                            : "bg-black/50 text-white hover:bg-black/75"
-                        }`}
-                        title="Polub to zdjęcie"
-                      >
-                        <Heart className={`w-3 h-3 ${isLiked ? "fill-white text-white" : "text-rose-400"}`} />
-                        <span>{photo.likes || 0}</span>
-                      </button>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-between p-1.5 opacity-90 group-hover:opacity-100">
+                        <span className="text-[10px] text-white font-medium truncate max-w-[60%]">
+                          {photo.author}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleLike(photo.key);
+                          }}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold transition active:scale-125 cursor-pointer ${
+                            isLiked 
+                              ? "bg-rose-500 text-white" 
+                              : "bg-black/60 text-white hover:bg-black/80"
+                          }`}
+                          title="Polub to zdjęcie"
+                        >
+                          <Heart className={`w-3 h-3 ${isLiked ? "fill-white text-white" : "text-rose-400"}`} />
+                          <span>{photo.likes || 0}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+
+              {/* Przycisk doładowania kolejnych zdjęć (chroni pamięć starszych telefonów) */}
+              {visibleCount < gallery.length && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => prev + 18)}
+                  className="w-full py-3 bg-stone-100 hover:bg-stone-200 dark:bg-[#1a261f] dark:hover:bg-[#203027] text-stone-700 dark:text-stone-300 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer mt-3"
+                >
+                  <ChevronDown className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                  <span>Pokaż więcej zdjęć ({gallery.length - visibleCount} pozostało)</span>
+                </button>
+              )}
+            </>
           )}
         </section>
       </div>
@@ -1223,7 +1239,7 @@ export default function PhotoParty() {
       {/* Modal QR */}
       {showQrModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setShowQrModal(false)}
         >
           <div
@@ -1286,30 +1302,28 @@ export default function PhotoParty() {
         </div>
       )}
 
-      {/* Lightbox / Odtwarzacz z Pinch-to-Zoom, Polubieniem i Pobieraniem */}
+      {/* Lightbox z obsługą Swipe, Zoom i bezpośredniego zapisu */}
       {selectedPhoto && selectedIndex !== null && (
         <div
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 select-none overflow-hidden"
+          className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-2 sm:p-4 select-none overflow-hidden"
           onClick={() => setSelectedIndex(null)}
         >
-          {/* Górny pasek nawigacyjny lightboxa */}
           <div className="absolute top-4 inset-x-4 flex justify-between items-center z-30 pointer-events-none">
             <div className="flex items-center gap-2 pointer-events-auto">
-              <div className="text-xs font-bold tracking-wider text-stone-400 px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-full border border-white/10">
+              <div className="text-xs font-bold tracking-wider text-stone-400 px-3 py-1.5 bg-black/75 rounded-full border border-white/10">
                 {selectedIndex + 1} / {gallery.length}
               </div>
 
-              {/* Przycisk polubienia w lightboxie */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleToggleLike(selectedPhoto.key);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition active:scale-125 cursor-pointer backdrop-blur-md border border-white/10 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition active:scale-125 cursor-pointer border border-white/10 ${
                   myLikedKeys.includes(selectedPhoto.key)
                     ? "bg-rose-500 text-white"
-                    : "bg-black/50 text-white hover:bg-black/75"
+                    : "bg-black/75 text-white hover:bg-black"
                 }`}
               >
                 <Heart className={`w-3.5 h-3.5 ${myLikedKeys.includes(selectedPhoto.key) ? "fill-white text-white" : "text-rose-400"}`} />
@@ -1318,7 +1332,6 @@ export default function PhotoParty() {
             </div>
 
             <div className="flex items-center gap-2 pointer-events-auto">
-              {/* Przycisk Pobierz */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -1339,7 +1352,6 @@ export default function PhotoParty() {
                 )}
               </button>
 
-              {/* Przycisk Usuń */}
               {myUploadedKeys.includes(selectedPhoto.key) && (
                 <button
                   type="button"
@@ -1362,7 +1374,6 @@ export default function PhotoParty() {
                 </button>
               )}
 
-              {/* Przycisk Zamknij */}
               <button
                 onClick={() => setSelectedIndex(null)}
                 className="p-2.5 sm:p-3 text-white bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer"
@@ -1373,35 +1384,32 @@ export default function PhotoParty() {
             </div>
           </div>
 
-          {/* Boczny przycisk: Poprzednie */}
           {gallery.length > 1 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 showPrevPhoto();
               }}
-              className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer backdrop-blur-md active:scale-90"
+              className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer active:scale-90"
               title="Poprzednie zdjęcie"
             >
               <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
             </button>
           )}
 
-          {/* Boczny przycisk: Następne */}
           {gallery.length > 1 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 showNextPhoto();
               }}
-              className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer backdrop-blur-md active:scale-90"
+              className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3.5 bg-white/15 hover:bg-white/30 text-white rounded-full transition cursor-pointer active:scale-90"
               title="Następne zdjęcie"
             >
               <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
             </button>
           )}
 
-          {/* Obszar zawartości */}
           <div 
             className="w-full h-full max-h-[85vh] flex flex-col items-center justify-center relative z-10 px-2"
             onClick={(e) => e.stopPropagation()}
