@@ -68,19 +68,6 @@ async function getLikesMap(s3: S3Client, bucket: string): Promise<Record<string,
 
 export async function POST(request: NextRequest) {
   try {
-    // Autoryzacja: sprawdzanie klucza API
-    const apiKey = request.headers.get('x-api-key');
-    const secret = process.env.API_SECRET_KEY;
-
-    if (!secret) {
-      console.error("API_SECRET_KEY nie jest ustawiony");
-      return NextResponse.json({ error: "Błąd konfiguracji serwera" }, { status: 500 });
-    }
-
-    if (!apiKey || apiKey !== secret) {
-      return NextResponse.json({ error: "Brak autoryzacji" }, { status: 401 });
-    }
-
     const { key, action } = await request.json();
 
     if (!key) {

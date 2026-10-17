@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import crypto from 'crypto';
 
 function getR2Client() {
   const endpoint = 
@@ -60,6 +61,9 @@ export async function POST(request: Request) {
     const guestName = author && author.trim() ? encodeURIComponent(author.trim()) : "Gosc";
     const cleanFilename = (filename || "plik.jpg").replace(/[^a-zA-Z0-9.-]/g, "_");
 
+    // Generujemy unikalny token do usuwania
+    const deleteToken = crypto.randomBytes(16).toString('hex');
+
     // Zapisujemy autora bezpośrednio w kluczu pliku
     const uniqueKey = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}__AUTOR__${guestName}__${cleanFilename}`;
 
@@ -67,13 +71,16 @@ export async function POST(request: Request) {
       Bucket: bucket,
       Key: uniqueKey,
       ContentType: contentType || "application/octet-stream",
+      Metadata: {
+        'delete-token': deleteToken,
+      },
     });
 
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
-    return NextResponse.json({ uploadUrl, key: uniqueKey });
+    return NextResponse.json({ uploadUrl, key: uniqueKey, deleteToken });
   } catch (error) {
     console.error("Błąd generowania URL:", error);
-    return NextResponse.json({ error: "Nie udało się wygenerować adresu uploadu" }, { status: 500 });
+    return NextResponse.json({ error: "Nie uda się wygenerować adresu uploadu" }, { status: 500 });
   }
 }

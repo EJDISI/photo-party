@@ -3,7 +3,8 @@ import {
   S3Client, 
   ListObjectsV2Command, 
   DeleteObjectCommand,
-  GetObjectCommand 
+  GetObjectCommand,
+  HeadObjectCommand 
 } from "@aws-sdk/client-s3";
 
 function getR2Client() {
@@ -154,14 +155,14 @@ export async function GET() {
       }
     );
   } catch (error) {
-    console.error("Błąd pobierania zdjęć z R2:", error);
-    return NextResponse.json({ error: "Błąd pobierania zdjęć" }, { status: 500 });
+    console.error("Błąd pobierania zdjęcia z R2:", error);
+    return NextResponse.json({ error: "Błąd pobierania zdjęcia" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const { key } = await request.json();
+    const { key, deleteToken } = await request.json();
     const s3 = getR2Client();
     const bucket = getBucketName();
 
@@ -169,20 +170,43 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Brak klucza pliku" }, { status: 400 });
     }
 
+    if (!deleteToken) {
+      return NextResponse.json({ error: "Brak tokena do usuwania" }, { status: 400 });
+    }
+
     if (!s3) {
       return NextResponse.json({ error: "Błąd konfiguracji R2" }, { status: 500 });
     }
 
-    const command = new DeleteObjectCommand({
+    // Sprawdzamy metadane obiektu, aby pobrać token usuwania
+    const headCommand = new HeadObjectCommand({
       Bucket: bucket,
       Key: key,
     });
 
-    await s3.send(command);
+    let headResponse;
+    try {
+      headResponse = await s3.send(headCommand);
+    } catch (headError) {
+      console.error("Błąd podczas pobierania metadanych:", headError);
+      return NextResponse.json({ error: "Plik nie znaleziony" }, { status: 404 });
+    }
+
+    const storedToken = headResponse.Metadata?.['delete-token'];
+    if (!storedToken || storedToken !== deleteToken) {
+      return NextResponse.json({ error: "Nieprawidłowy token usuwania" }, { status: 403 });
+    }
+
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    });
+
+    await s3.send(deleteCommand);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Błąd usuwania pliku z R2:", error);
-    return NextResponse.json({ error: "Nie udało się usunąć pliku" }, { status: 500 });
+    return NextResponse.json({ error: "Nie uda się usunąć pliku" }, { status: 500 });
   }
 }
