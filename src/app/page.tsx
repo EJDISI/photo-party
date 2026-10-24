@@ -892,21 +892,14 @@ export default function PhotoParty() {
       </div>
 
       {/* Pasek nawigacyjny */}
-      <header className="bg-white dark:bg-[#141d18] border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-6 pt-4 pb-4 text-center relative shadow-sm">
-        <div className="flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-1">
-          <span>Wesele</span>
-          <Heart className="w-4 h-4 fill-rose-400 text-rose-400" />
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-serif font-extrabold tracking-tight text-[#1f2d27] dark:text-[#f2f7f4]">
-          Kinga i Kamil
-        </h1>
-
-        {/* Przyciski w nagłówku */}
-        <div className="absolute right-4 top-4 flex items-center gap-2">
+      <header className="bg-white/95 dark:bg-[#141d18]/95 backdrop-blur-md border-b border-[#e8e2d8] dark:border-[#22332a] sticky top-0 z-20 px-4 sm:px-6 py-2.5 sm:py-3 shadow-xs">
+        <div className="max-w-md mx-auto flex items-center justify-between">
+          {/* Lewa strona: Przełącznik motywu (symetryczny 40x40px) */}
           <button
             onClick={toggleDarkMode}
-            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center justify-center shadow-sm"
+            className="w-10 h-10 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center justify-center shadow-xs shrink-0"
             title={isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"}
+            aria-label="Zmień motyw"
           >
             {isDark ? (
               <Sun className="w-5 h-5 text-amber-400" />
@@ -915,15 +908,18 @@ export default function PhotoParty() {
             )}
           </button>
 
-          <button
-            onClick={() => setShowQrModal(true)}
-            className="p-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8] rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-            title="Pokaż kod QR"
-          >
-            <QrCode className="w-5 h-5 text-emerald-800 dark:text-emerald-400" />
-            <span className="text-[11px] font-bold hidden sm:inline">QR</span>
-          </button>
+          {/* Środek: Idealnie wyśrodkowany tytuł weselny */}
+          <div className="flex-1 text-center px-2">
+            <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-emerald-800 dark:text-emerald-400 mb-0.5">
+              <span>Wesele</span>
+              <Heart className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-serif font-extrabold tracking-tight text-[#1f2d27] dark:text-[#f2f7f4] leading-tight">
+              Kinga i Kamil
+            </h1>
+          </div>
 
+          {/* Prawa strona: Panel Gospodarzy (kod PIN) - dokładnie taki sam wymiar 40x40px */}
           <button
             onClick={() => {
               if (isModerator) {
@@ -934,17 +930,15 @@ export default function PhotoParty() {
                 setShowModeratorModal(true);
               }
             }}
-            className={`p-2.5 border rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+            className={`w-10 h-10 border rounded-xl transition cursor-pointer flex items-center justify-center shadow-xs shrink-0 ${
               isModerator
                 ? "bg-amber-400 text-stone-950 border-amber-300 font-bold"
                 : "bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8]"
             }`}
             title={isModerator ? "Tryb Gospodarzy aktywny (kliknij, aby wyjść)" : "Panel Gospodarzy (kod PIN)"}
+            aria-label="Panel Gospodarzy"
           >
             <Crown className={`w-5 h-5 ${isModerator ? "fill-stone-950 text-stone-950" : "text-amber-500"}`} />
-            <span className="text-[11px] font-bold hidden sm:inline">
-              {isModerator ? "Gospodarz" : "PIN"}
-            </span>
           </button>
         </div>
       </header>
