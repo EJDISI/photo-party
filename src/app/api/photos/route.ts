@@ -162,7 +162,7 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    const { key, deleteToken } = await request.json();
+    const { key, deleteToken, adminPin } = await request.json();
     const s3 = getR2Client();
     const bucket = getBucketName();
 
@@ -170,31 +170,36 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Brak klucza pliku" }, { status: 400 });
     }
 
-    if (!deleteToken) {
-      return NextResponse.json({ error: "Brak tokena do usuwania" }, { status: 400 });
-    }
-
     if (!s3) {
       return NextResponse.json({ error: "Błąd konfiguracji R2" }, { status: 500 });
     }
 
-    // Sprawdzamy metadane obiektu, aby pobrać token usuwania
-    const headCommand = new HeadObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    });
+    const expectedAdminPin = (process.env.ADMIN_PIN || "1707").trim();
+    const isModerator = adminPin && typeof adminPin === "string" && adminPin.trim() === expectedAdminPin;
 
-    let headResponse;
-    try {
-      headResponse = await s3.send(headCommand);
-    } catch (headError) {
-      console.error("Błąd podczas pobierania metadanych:", headError);
-      return NextResponse.json({ error: "Plik nie znaleziony" }, { status: 404 });
-    }
+    if (!isModerator) {
+      if (!deleteToken) {
+        return NextResponse.json({ error: "Wymagana autoryzacja (brak tokena lub PINu)" }, { status: 403 });
+      }
 
-    const storedToken = headResponse.Metadata?.['delete-token'];
-    if (!storedToken || storedToken !== deleteToken) {
-      return NextResponse.json({ error: "Nieprawidłowy token usuwania" }, { status: 403 });
+      // Sprawdzamy metadane obiektu, aby pobrać token usuwania
+      const headCommand = new HeadObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+
+      let headResponse;
+      try {
+        headResponse = await s3.send(headCommand);
+      } catch (headError) {
+        console.error("Błąd podczas pobierania metadanych:", headError);
+        return NextResponse.json({ error: "Plik nie znaleziony" }, { status: 404 });
+      }
+
+      const storedToken = headResponse.Metadata?.["delete-token"];
+      if (!storedToken || storedToken !== deleteToken) {
+        return NextResponse.json({ error: "Nieprawidłowy token usuwania" }, { status: 403 });
+      }
     }
 
     const deleteCommand = new DeleteObjectCommand({
@@ -204,7 +209,7 @@ export async function DELETE(request: Request) {
 
     await s3.send(deleteCommand);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deletedBy: isModerator ? "moderator" : "author" });
   } catch (error) {
     console.error("Błąd usuwania pliku z R2:", error);
     return NextResponse.json({ error: "Nie uda się usunąć pliku" }, { status: 500 });

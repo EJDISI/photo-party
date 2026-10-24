@@ -378,6 +378,13 @@ export default function PhotoParty() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [myUploadedKeys, setMyUploadedKeys] = useState<string[]>([]);
+  const [myDeleteTokens, setMyDeleteTokens] = useState<Record<string, string>>({});
+  const [isModerator, setIsModerator] = useState(false);
+  const [moderatorPin, setModeratorPin] = useState("");
+  const [showModeratorModal, setShowModeratorModal] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [myLikedKeys, setMyLikedKeys] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -432,6 +439,19 @@ export default function PhotoParty() {
         try {
           setMyUploadedKeys(JSON.parse(savedKeys));
         } catch {}
+      }
+
+      const savedTokens = localStorage.getItem("photo_party_delete_tokens");
+      if (savedTokens) {
+        try {
+          setMyDeleteTokens(JSON.parse(savedTokens));
+        } catch {}
+      }
+
+      const savedPin = sessionStorage.getItem("photo_party_admin_pin");
+      if (savedPin) {
+        setModeratorPin(savedPin);
+        setIsModerator(true);
       }
 
       const savedLikes = localStorage.getItem("photo_party_my_liked_keys");
@@ -625,7 +645,10 @@ export default function PhotoParty() {
     }
   };
 
-  const uploadSingleFile = async (item: FileItem, currentAuthor: string): Promise<string> => {
+  const uploadSingleFile = async (
+    item: FileItem, 
+    currentAuthor: string
+  ): Promise<{ key: string; deleteToken: string }> => {
     setFiles((prev) =>
       prev.map((f) => (f.id === item.id ? { ...f, status: "uploading", progress: 10 } : f))
     );
@@ -646,7 +669,7 @@ export default function PhotoParty() {
       });
 
       if (!res.ok) throw new Error("Błąd autoryzacji serwera R2");
-      const { uploadUrl, key } = await res.json();
+      const { uploadUrl, key, deleteToken } = await res.json();
 
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -678,7 +701,7 @@ export default function PhotoParty() {
         xhr.send(finalFile);
       });
 
-      return key;
+      return { key, deleteToken };
     } catch (err: unknown) {
       console.error("Błąd procesu wgrywania:", err);
       setFiles((prev) =>
@@ -702,11 +725,20 @@ export default function PhotoParty() {
 
     try {
       const uploadedCount = files.length;
-      const uploadedKeys = await Promise.all(files.map((item) => uploadSingleFile(item, author)));
+      const uploadedResults = await Promise.all(files.map((item) => uploadSingleFile(item, author)));
       
-      const newKeysList = [...myUploadedKeys, ...uploadedKeys.filter(Boolean)];
+      const newKeysList = [...myUploadedKeys, ...uploadedResults.map((r) => r.key).filter(Boolean)];
       setMyUploadedKeys(newKeysList);
       localStorage.setItem("photo_party_my_keys", JSON.stringify(newKeysList));
+
+      const updatedTokens = { ...myDeleteTokens };
+      uploadedResults.forEach((r) => {
+        if (r.key && r.deleteToken) {
+          updatedTokens[r.key] = r.deleteToken;
+        }
+      });
+      setMyDeleteTokens(updatedTokens);
+      localStorage.setItem("photo_party_delete_tokens", JSON.stringify(updatedTokens));
 
       files.forEach((f) => {
         if (f.previewUrl) {
@@ -731,15 +763,63 @@ export default function PhotoParty() {
     }
   };
 
+  const handleVerifyModeratorPin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!pinInput.trim()) return;
+
+    try {
+      setIsVerifyingPin(true);
+      setPinError(null);
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinInput.trim() }),
+      });
+
+      if (res.ok) {
+        setIsModerator(true);
+        setModeratorPin(pinInput.trim());
+        sessionStorage.setItem("photo_party_admin_pin", pinInput.trim());
+        setShowModeratorModal(false);
+        setPinInput("");
+        setToastMessage("Witajcie, Gospodarze! Tryb moderatora aktywny 👑");
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        setPinError("Niepoprawny kod PIN (data wesela)");
+      }
+    } catch {
+      setPinError("Błąd połączenia z serwerem");
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  };
+
+  const handleLogoutModerator = () => {
+    setIsModerator(false);
+    setModeratorPin("");
+    sessionStorage.removeItem("photo_party_admin_pin");
+    setToastMessage("Wylogowano z trybu moderatora");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   const handleDeletePhoto = async (key: string) => {
-    if (!confirm("Czy na pewno chcesz usunąć to zdjęcie/film z albumu?")) return;
+    const isHost = isModerator;
+    const confirmMsg = isHost
+      ? "👑 [Tryb Gospodarza] Czy na pewno chcesz trwale usunąć to zdjęcie z albumu?"
+      : "Czy na pewno chcesz usunąć to zdjęcie/film z albumu?";
+
+    if (!confirm(confirmMsg)) return;
 
     try {
       setIsDeleting(true);
       const res = await fetch("/api/photos", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({
+          key,
+          deleteToken: myDeleteTokens[key] || "",
+          adminPin: isHost ? moderatorPin : "",
+        }),
       });
 
       if (res.ok) {
@@ -748,8 +828,11 @@ export default function PhotoParty() {
         setMyUploadedKeys(updatedKeys);
         localStorage.setItem("photo_party_my_keys", JSON.stringify(updatedKeys));
         setSelectedIndex(null);
+        setToastMessage("Plik został usunięty 🗑️");
+        setTimeout(() => setToastMessage(null), 3000);
       } else {
-        alert("Wystąpił błąd podczas usuwania pliku.");
+        const errData = await res.json().catch(() => null);
+        alert(errData?.error || "Wystąpił błąd podczas usuwania pliku.");
       }
     } catch (err) {
       console.error("Błąd usuwania:", err);
@@ -840,8 +923,48 @@ export default function PhotoParty() {
             <QrCode className="w-5 h-5 text-emerald-800 dark:text-emerald-400" />
             <span className="text-[11px] font-bold hidden sm:inline">QR</span>
           </button>
+
+          <button
+            onClick={() => {
+              if (isModerator) {
+                handleLogoutModerator();
+              } else {
+                setPinError(null);
+                setPinInput("");
+                setShowModeratorModal(true);
+              }
+            }}
+            className={`p-2.5 border rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              isModerator
+                ? "bg-amber-400 text-stone-950 border-amber-300 font-bold"
+                : "bg-stone-100 hover:bg-stone-200 dark:bg-[#1d2a23] dark:hover:bg-[#25372e] border-[#e8e2d8] dark:border-transparent text-[#2c3e35] dark:text-[#e6ede8]"
+            }`}
+            title={isModerator ? "Tryb Gospodarzy aktywny (kliknij, aby wyjść)" : "Panel Gospodarzy (kod PIN)"}
+          >
+            <Crown className={`w-5 h-5 ${isModerator ? "fill-stone-950 text-stone-950" : "text-amber-500"}`} />
+            <span className="text-[11px] font-bold hidden sm:inline">
+              {isModerator ? "Gospodarz" : "PIN"}
+            </span>
+          </button>
         </div>
       </header>
+
+      {isModerator && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 dark:bg-amber-400/10 dark:border-amber-400/20 py-2.5 px-4 text-center">
+          <div className="max-w-md mx-auto flex items-center justify-between text-xs font-medium text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-1.5">
+              <Crown className="w-4 h-4 fill-amber-500 text-amber-500 shrink-0" />
+              <span>Tryb Gospodarzy aktywny &bull; Możesz usuwać dowolne zdjęcia</span>
+            </div>
+            <button
+              onClick={handleLogoutModerator}
+              className="text-[11px] font-bold underline hover:opacity-80 ml-2 cursor-pointer"
+            >
+              Wyjdź
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-md mx-auto px-4 mt-6 space-y-6">
         <div className="text-center px-2">
@@ -1183,7 +1306,7 @@ export default function PhotoParty() {
                         />
                       )}
 
-                      {isMine && (
+                      {(isMine || isModerator) && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1191,8 +1314,12 @@ export default function PhotoParty() {
                             handleDeletePhoto(photo.key);
                           }}
                           disabled={isDeleting}
-                          title="Usuń ten plik"
-                          className="absolute top-1 right-1 z-10 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg transition shadow-md cursor-pointer flex items-center justify-center"
+                          title={isModerator && !isMine ? "Usuń jako Gospodarz" : "Usuń ten plik"}
+                          className={`absolute top-1 right-1 z-10 p-1.5 text-white rounded-lg transition shadow-md cursor-pointer flex items-center justify-center ${
+                            isModerator && !isMine
+                              ? "bg-rose-700/95 hover:bg-rose-800"
+                              : "bg-rose-600/90 hover:bg-rose-700"
+                          }`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1253,6 +1380,83 @@ export default function PhotoParty() {
           )}
         </section>
       </div>
+
+      {/* Modal PIN Moderatora / Gospodarzy */}
+      {showModeratorModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => setShowModeratorModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#16201a] w-full max-w-xs rounded-3xl p-6 text-center shadow-2xl space-y-4 relative border border-stone-200 dark:border-[#22332a]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowModeratorModal(false)}
+              className="absolute top-3 right-3 p-2 text-stone-400 hover:text-stone-800 dark:hover:text-white bg-stone-100 dark:bg-[#1f2d25] rounded-full transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="pt-2">
+              <div className="inline-flex p-3 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl mb-2 shadow-inner">
+                <Crown className="w-8 h-8 fill-amber-500 text-amber-500" />
+              </div>
+              <h3 className="text-xl font-serif font-bold text-[#1f2d27] dark:text-[#f2f7f4]">
+                Panel Gospodarzy
+              </h3>
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                Wpisz kod PIN (data wesela), aby zarządzać zdjęciami w albumie.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyModeratorPin} className="space-y-4 pt-1">
+              <div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="PIN"
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value);
+                    setPinError(null);
+                  }}
+                  className="w-full text-center text-2xl tracking-[0.35em] font-mono py-2.5 px-4 bg-stone-100 dark:bg-[#111914] border border-stone-300 dark:border-stone-700 rounded-xl text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
+                />
+                {pinError && (
+                  <p className="text-xs text-rose-500 font-semibold mt-2 flex items-center justify-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{pinError}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="submit"
+                  disabled={isVerifyingPin || !pinInput.trim()}
+                  className="w-full py-3 bg-amber-400 hover:bg-amber-500 active:scale-[0.98] disabled:opacity-50 text-stone-950 font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer text-sm shadow-md"
+                >
+                  {isVerifyingPin ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
+                  ) : (
+                    <span>Zaloguj jako Gospodarz</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModeratorModal(false)}
+                  className="w-full py-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 text-xs font-semibold cursor-pointer transition"
+                >
+                  Anuluj
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal QR */}
       {showQrModal && (
@@ -1374,7 +1578,7 @@ export default function PhotoParty() {
                 )}
               </button>
 
-              {myUploadedKeys.includes(selectedPhoto.key) && (
+              {(myUploadedKeys.includes(selectedPhoto.key) || isModerator) && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1382,15 +1586,21 @@ export default function PhotoParty() {
                     handleDeletePhoto(selectedPhoto.key);
                   }}
                   disabled={isDeleting}
-                  className="p-2.5 sm:p-3 text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-lg"
-                  title="Usuń plik"
+                  className={`p-2.5 sm:p-3 text-white rounded-full transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-lg ${
+                    isModerator && !myUploadedKeys.includes(selectedPhoto.key)
+                      ? "bg-rose-700 hover:bg-rose-800"
+                      : "bg-rose-600 hover:bg-rose-700"
+                  }`}
+                  title={isModerator && !myUploadedKeys.includes(selectedPhoto.key) ? "Usuń jako Gospodarz" : "Usuń plik"}
                 >
                   {isDeleting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      <span className="hidden sm:inline">Usuń</span>
+                      <span className="hidden sm:inline">
+                        {isModerator && !myUploadedKeys.includes(selectedPhoto.key) ? "Usuń (Gospodarz)" : "Usuń"}
+                      </span>
                     </>
                   )}
                 </button>
